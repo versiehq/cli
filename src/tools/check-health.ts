@@ -41,8 +41,18 @@ export async function checkHealth(args: z.infer<typeof checkHealthSchema.inputSc
     await git(["checkout", config.devBranch], repoPath);
   }
 
+  // 3-8: Run all remaining checks in parallel (branch is already resolved above)
+  const [statusResult, gap, remoteResult, worktreeCheck, checkpoints, deployWarning] =
+    await Promise.all([
+      git(["status", "--porcelain"], repoPath),
+      getDeployGap(repoPath, config),
+      git(["remote"], repoPath),
+      checkNoWorktrees(repoPath),
+      listCheckpoints(repoPath),
+      checkDeployConfig(repoPath, config.liveBranch),
+    ]);
+
   // 3. Uncommitted changes
-  const statusResult = await git(["status", "--porcelain"], repoPath);
   if (statusResult.stdout.trim()) {
     const count = statusResult.stdout.split("\n").filter(Boolean).length;
     checks.push(`ℹ ${count} unsaved change${count === 1 ? "" : "s"} — say 'save my work' to save`);
@@ -51,7 +61,6 @@ export async function checkHealth(args: z.infer<typeof checkHealthSchema.inputSc
   }
 
   // 4. Deploy gap
-  const gap = await getDeployGap(repoPath);
   if (gap.count === 0) {
     checks.push(`✓ Your live app is up to date with your latest work`);
   } else if (gap.count <= 5) {
@@ -61,7 +70,6 @@ export async function checkHealth(args: z.infer<typeof checkHealthSchema.inputSc
   }
 
   // 5. Remote connection
-  const remoteResult = await git(["remote"], repoPath);
   if (!remoteResult.stdout.trim()) {
     checks.push(`⚠ Project isn't connected to GitHub yet`);
   } else {
@@ -69,21 +77,19 @@ export async function checkHealth(args: z.infer<typeof checkHealthSchema.inputSc
   }
 
   // 6. Active worktrees
-  const worktreeCheck = await checkNoWorktrees(repoPath);
   if (!worktreeCheck.ok) {
     checks.push(`⚠ Active worktree session detected — changes made there can bypass Versie's protection`);
   }
 
   // 7. Checkpoint count
-  const checkpoints = await listCheckpoints(repoPath);
   if (checkpoints.length > 0) {
     checks.push(`✓ ${checkpoints.length} checkpoint${checkpoints.length === 1 ? "" : "s"} saved`);
   }
 
   // 8. Deploy platform config
-  const deployWarning = await checkDeployConfig(repoPath, config.liveBranch);
-  if (deployWarning) {
-    checks.push(`⚠ ${deployWarning}`);
+  const deployWarningMsg = deployWarning;
+  if (deployWarningMsg) {
+    checks.push(`⚠ ${deployWarningMsg}`);
   }
 
   return checks.join("\n");

@@ -30,23 +30,12 @@ export async function projectTimeline(args: z.infer<typeof projectTimelineSchema
   const repoPath = resolveRepoPath(args.repo_path);
   const config = await ensureInitialized(repoPath);
 
-  // Get work history from dev branch
-  const workLog = await git(
-    ["log", config.devBranch, "--format=%H|%s|%ar", "-30"],
-    repoPath
-  );
-
-  // Get release tags (deploy events)
-  const releaseTags = await git(
-    ["tag", "-l", "versie/release/*", "--sort=-creatordate", "--format=%(refname:short)|%(subject)|%(creatordate:relative)"],
-    repoPath
-  );
-
-  // Get checkpoints
-  const checkpointTags = await git(
-    ["tag", "-l", "versie/checkpoint/*", "--sort=-creatordate", "--format=%(refname:short)|%(subject)|%(creatordate:relative)"],
-    repoPath
-  );
+  // Fetch work history, release tags, and checkpoints in parallel
+  const [workLog, releaseTags, checkpointTags] = await Promise.all([
+    git(["log", config.devBranch, "--format=%H|%s|%ar", "-30"], repoPath),
+    git(["tag", "-l", "versie/release/*", "--sort=-creatordate", "--format=%(refname:short)|%(subject)|%(creatordate:relative)"], repoPath),
+    git(["tag", "-l", "versie/checkpoint/*", "--sort=-creatordate", "--format=%(refname:short)|%(subject)|%(creatordate:relative)"], repoPath),
+  ]);
 
   const workEntries: TimelineEntry[] = workLog.stdout
     .split("\n")

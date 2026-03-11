@@ -35,8 +35,8 @@ export async function shipIt(args: z.infer<typeof shipItSchema.inputSchema>): Pr
     await saveMyWork({ repo_path: repoPath });
   }
 
-  // Step 2: Get deploy gap before merge (for the report)
-  const gap = await getDeployGap(repoPath);
+  // Step 2: Get deploy gap before merge (pass config to avoid re-reading)
+  const gap = await getDeployGap(repoPath, config);
   if (gap.count === 0) {
     return "Your live app is already up to date — nothing new to deploy.";
   }

@@ -70,20 +70,14 @@ export async function ensureInitialized(repoPath: string): Promise<VersieConfig>
   return config;
 }
 
-/** Switch to versie-dev if not already on it */
-export async function ensureOnDev(repoPath: string): Promise<VersieConfig> {
-  const config = await ensureInitialized(repoPath);
+/** Switch to versie-dev if not already on it. Accepts optional pre-resolved config to avoid re-reading. */
+export async function ensureOnDev(repoPath: string, config?: VersieConfig): Promise<VersieConfig> {
+  const resolvedConfig = config ?? await ensureInitialized(repoPath);
   const current = await git(["branch", "--show-current"], repoPath);
-  if (current.stdout !== config.devBranch) {
-    await git(["checkout", config.devBranch], repoPath);
+  if (current.stdout !== resolvedConfig.devBranch) {
+    await git(["checkout", resolvedConfig.devBranch], repoPath);
   }
-  return config;
-}
-
-/** Get the current branch name */
-export async function currentBranch(repoPath: string): Promise<string> {
-  const result = await git(["branch", "--show-current"], repoPath);
-  return result.stdout;
+  return resolvedConfig;
 }
 
 export interface DeployGap {
@@ -92,10 +86,10 @@ export interface DeployGap {
 }
 
 /** How many commits are on dev but not yet on live */
-export async function getDeployGap(repoPath: string): Promise<DeployGap> {
-  const config = await ensureInitialized(repoPath);
+export async function getDeployGap(repoPath: string, config?: VersieConfig): Promise<DeployGap> {
+  const resolvedConfig = config ?? await ensureInitialized(repoPath);
   const result = await git(
-    ["log", `${config.liveBranch}..${config.devBranch}`, "--oneline"],
+    ["log", `${resolvedConfig.liveBranch}..${resolvedConfig.devBranch}`, "--oneline"],
     repoPath
   );
   if (!result.stdout) return { count: 0, summaries: [] };

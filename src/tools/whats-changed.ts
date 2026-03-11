@@ -26,7 +26,7 @@ export async function whatsChanged(args: z.infer<typeof whatsChangedSchema.input
   const mode = args.since ?? "last save";
 
   if (mode === "last deploy") {
-    const gap = await getDeployGap(repoPath);
+    const gap = await getDeployGap(repoPath, config);
     if (gap.count === 0) {
       return "Everything you've saved is already live — nothing new since your last deploy.";
     }
@@ -43,8 +43,10 @@ export async function whatsChanged(args: z.infer<typeof whatsChangedSchema.input
     return "No changes since your last save — everything is saved.";
   }
 
-  const diffResult = await git(["diff", "--stat"], repoPath);
-  const stagedResult = await git(["diff", "--cached", "--stat"], repoPath);
+  const [diffResult, stagedResult] = await Promise.all([
+    git(["diff", "--stat"], repoPath),
+    git(["diff", "--cached", "--stat"], repoPath),
+  ]);
 
   const parts: string[] = [];
   if (stagedResult.stdout.trim()) parts.push(stagedResult.stdout.trim());

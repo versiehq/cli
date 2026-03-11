@@ -58,8 +58,8 @@ export async function saveMyWork(args: z.infer<typeof saveMyWorkSchema.inputSche
     }
   }
 
-  // Get deploy gap for context
-  const gap = await getDeployGap(repoPath);
+  // Get deploy gap for context (pass config to avoid re-reading)
+  const gap = await getDeployGap(repoPath, config);
   const fileCount = countFiles(statusResult.stdout);
   const gapNote =
     gap.count > 1
