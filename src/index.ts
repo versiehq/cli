@@ -58,6 +58,11 @@ server.registerTool("list_commands", listCommandsSchema, tool(listCommands));
 server.registerTool("deploy_platform_help", deployPlatformHelpSchema, tool(deployPlatformHelp));
 
 async function main(): Promise<void> {
+  if (process.argv.includes("--install")) {
+    const { runInstaller } = await import("./install.js");
+    runInstaller();
+    return;
+  }
   const transport = new StdioServerTransport();
   await server.connect(transport);
   logger.info("Versie MCP server started");

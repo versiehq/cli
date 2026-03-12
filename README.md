@@ -22,6 +22,16 @@ No Git knowledge required. No branches to manage. No commands to memorize.
 
 ## Install — 2 minutes
 
+**Option A — Automatic (recommended):**
+
+```
+npx versie --install
+```
+
+Then restart your AI tool. Versie will introduce itself the next time you open a project.
+
+**Option B — Manual:**
+
 Add one entry to your MCP client config:
 
 ```json
@@ -35,16 +45,14 @@ Add one entry to your MCP client config:
 }
 ```
 
-**Where to add it:**
-
 | Tool | Config file location |
 |------|---------------------|
 | Cursor | Settings → MCP → Edit config |
 | Claude Desktop | Settings → Developer → Edit config |
 | Windsurf | Cascade → Configure MCP |
-| Claude Code | `.claude/settings.json` in your project |
+| Claude Code | `~/.claude.json` |
 
-Then restart your AI tool. Versie will introduce itself the next time you open a project.
+Then restart your AI tool.
 
 ---
 
