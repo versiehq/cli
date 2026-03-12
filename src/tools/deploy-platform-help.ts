@@ -1,5 +1,5 @@
 import { z } from "zod/v4";
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { resolveRepoPath, readConfig } from "../utils/config.js";
 
@@ -99,9 +99,12 @@ function fixBroadGithubActions(repoPath: string, liveBranch: string): ActionsRes
     return result;
   }
 
+  const MAX_WORKFLOW_SIZE = 1024 * 1024; // 1MB
+
   for (const file of files) {
     const filePath = join(workflowsDir, file);
     try {
+      if (statSync(filePath).size > MAX_WORKFLOW_SIZE) continue; // skip oversized files
       const content = readFileSync(filePath, "utf-8");
 
       // Detect: push with no branches filter, or push with wildcard

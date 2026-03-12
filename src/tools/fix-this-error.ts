@@ -12,6 +12,7 @@ export const fixThisErrorSchema = {
   inputSchema: z.object({
     error_message: z
       .string()
+      .max(10_000)
       .describe("The error message you received. Paste the full text."),
     repo_path: z
       .string()
@@ -38,9 +39,17 @@ export async function fixThisError(args: z.infer<typeof fixThisErrorSchema.input
     );
   }
 
-  // Snapshot before destructive operations
+  // Snapshot before destructive operations.
+  // If snapshot fails, abort — better to leave the error unfixed than lose work with no recovery.
   if (pattern.snapshotFirst) {
-    await createAutoSnapshot(repoPath);
+    try {
+      await createAutoSnapshot(repoPath);
+    } catch (err) {
+      throw new Error(
+        `Couldn't create a safety snapshot before fixing — your project hasn't been changed. ` +
+        `Check that your project folder is accessible and try again. (${err instanceof Error ? err.message : String(err)})`
+      );
+    }
   }
 
   // Execute fix sequence

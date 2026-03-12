@@ -12,6 +12,7 @@ export const goBackToSchema = {
   inputSchema: z.object({
     target: z
       .string()
+      .max(500)
       .describe(
         "What to restore to. Examples: 'live version', 'yesterday', 'before I added payments', 'mvp-ready'"
       ),
@@ -30,8 +31,16 @@ export async function goBackTo(args: z.infer<typeof goBackToSchema.inputSchema>)
   const config = await ensureInitialized(repoPath);
   const target = args.target;
 
-  // Always snapshot current state before a destructive restore
-  await createAutoSnapshot(repoPath);
+  // Always snapshot current state before a destructive restore.
+  // If snapshot fails, abort — better to do nothing than lose work with no recovery point.
+  try {
+    await createAutoSnapshot(repoPath);
+  } catch (err) {
+    throw new Error(
+      `Couldn't create a safety snapshot before restoring — your work hasn't been changed. ` +
+      `Check that your project folder is accessible and try again. (${err instanceof Error ? err.message : String(err)})`
+    );
+  }
 
   // Case 1: Restore versie-dev to match the live branch
   if (LIVE_PATTERNS.test(target)) {

@@ -11,6 +11,7 @@ export const createCheckpointSchema = {
   inputSchema: z.object({
     name: z
       .string()
+      .max(100)
       .describe("A name for this checkpoint. Examples: 'working-login', 'before-redesign', 'mvp'"),
     repo_path: z
       .string()

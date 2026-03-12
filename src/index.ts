@@ -30,12 +30,15 @@ function tool<T extends Record<string, unknown>>(
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       logger.error(msg);
+      // Strip file paths from user-facing message to avoid leaking system info.
+      // Full details are logged to stderr for debugging.
+      const safeMsg = msg.replace(/\/[^\s:]+/g, "[path]");
       return {
         content: [
           {
             type: "text" as const,
             text:
-              `Something went wrong. Please try again, or contact support@versie.co.\n\nDetails: ${msg}`,
+              `Something went wrong. Please try again, or contact support@versie.co.\n\nDetails: ${safeMsg}`,
           },
         ],
       };
