@@ -1,6 +1,6 @@
 import { z } from "zod/v4";
-import { getDeployGap } from "../git/branches.js";
-import { resolveRepoPath, readConfig } from "../utils/config.js";
+import { getDeployGap, resolveWorkingDir } from "../git/branches.js";
+import { readConfig } from "../utils/config.js";
 
 export const listCommandsSchema = {
   description:
@@ -14,7 +14,7 @@ export const listCommandsSchema = {
 };
 
 export async function listCommands(args: z.infer<typeof listCommandsSchema.inputSchema>): Promise<string> {
-  const repoPath = resolveRepoPath(args.repo_path);
+  const repoPath = await resolveWorkingDir(args.repo_path);
   const config = readConfig(repoPath);
 
   const isSetUp = config !== null;

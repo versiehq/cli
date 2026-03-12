@@ -1,10 +1,9 @@
 import { z } from "zod/v4";
 import { git } from "../git/executor.js";
-import { ensureInitialized, getDeployGap } from "../git/branches.js";
+import { ensureInitialized, getDeployGap, resolveWorkingDir } from "../git/branches.js";
 import { checkNoWorktrees } from "../git/safety.js";
 import { createAutoSnapshot, createReleaseTag } from "../snapshots/manager.js";
 import { saveMyWork } from "./save-my-work.js";
-import { resolveRepoPath } from "../utils/config.js";
 
 export const shipItSchema = {
   description:
@@ -20,7 +19,7 @@ export const shipItSchema = {
 };
 
 export async function shipIt(args: z.infer<typeof shipItSchema.inputSchema>): Promise<string> {
-  const repoPath = resolveRepoPath(args.repo_path);
+  const repoPath = await resolveWorkingDir(args.repo_path);
   const config = await ensureInitialized(repoPath);
 
   // Safety: warn about active worktrees

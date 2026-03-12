@@ -1,7 +1,6 @@
 import { z } from "zod/v4";
 import { git } from "../git/executor.js";
-import { ensureOnDev, getDeployGap } from "../git/branches.js";
-import { resolveRepoPath } from "../utils/config.js";
+import { ensureOnDev, getDeployGap, resolveWorkingDir } from "../git/branches.js";
 
 export const saveMyWorkSchema = {
   description:
@@ -20,7 +19,7 @@ export const saveMyWorkSchema = {
 };
 
 export async function saveMyWork(args: z.infer<typeof saveMyWorkSchema.inputSchema>): Promise<string> {
-  const repoPath = resolveRepoPath(args.repo_path);
+  const repoPath = await resolveWorkingDir(args.repo_path);
   const config = await ensureOnDev(repoPath);
 
   // Check for changes

@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { git } from "./executor.js";
 import { readConfig, writeConfig, type VersieConfig } from "../utils/config.js";
 import { logger } from "../utils/logger.js";
@@ -98,6 +98,23 @@ export async function getDeployGap(repoPath: string, config?: VersieConfig): Pro
     count: lines.length,
     summaries: lines.map((l) => l.replace(/^[a-f0-9]+ /, "")),
   };
+}
+
+/**
+ * Resolve the working directory for git operations.
+ * If called from inside a linked worktree (e.g. Claude Code's .claude/worktrees/),
+ * returns the main worktree root instead so config and init work correctly.
+ */
+export async function resolveWorkingDir(repoPath?: string): Promise<string> {
+  const base = repoPath ?? process.cwd();
+  const result = await git(["rev-parse", "--git-common-dir"], base);
+  if (result.exitCode !== 0) return base;
+  const commonDir = result.stdout.trim();
+  // In a main worktree, --git-common-dir returns ".git" (relative path)
+  // In a linked worktree, it returns an absolute path like /path/to/repo/.git
+  if (!commonDir.startsWith("/")) return base;
+  if (commonDir.endsWith("/.git")) return commonDir.slice(0, -5);
+  return dirname(commonDir);
 }
 
 /** Detect the default live branch (main or master) */

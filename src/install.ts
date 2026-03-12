@@ -10,10 +10,24 @@ interface ToolConfig {
   detectionPath: string;
 }
 
-const VERSIE_ENTRY = {
-  command: "npx",
-  args: ["-y", "versie"],
-};
+/**
+ * Build the MCP server entry to write into each config.
+ *
+ * GUI apps (Claude Desktop, Cursor, Windsurf) launch subprocesses with a
+ * minimal system PATH that excludes version-manager paths (nvm, fnm, asdf,
+ * Volta, etc.). Writing "npx" would silently fail for those users.
+ *
+ * Instead we resolve npx from the same directory as the node binary that is
+ * running the installer right now — so whatever version manager the user has
+ * active, the correct absolute path gets written.
+ */
+function buildVersieEntry(): { command: string; args: string[] } {
+  const npxPath = join(dirname(process.execPath), "npx");
+  // Fall back to bare "npx" only if the sibling binary doesn't exist
+  // (e.g. unusual global install layouts).
+  const command = existsSync(npxPath) ? npxPath : "npx";
+  return { command, args: ["-y", "versie"] };
+}
 
 function getToolConfigs(): ToolConfig[] {
   const home = homedir();
@@ -106,7 +120,7 @@ function installIntoConfig(tool: ToolConfig): InstallResult {
     return "already_installed";
   }
 
-  mcpServers["versie"] = VERSIE_ENTRY;
+  mcpServers["versie"] = buildVersieEntry();
   config["mcpServers"] = mcpServers;
 
   try {
@@ -138,8 +152,9 @@ export function runInstaller(): void {
 
   if (!anyFound) {
     console.log("No supported AI tools found.\n");
+    const entry = buildVersieEntry();
     console.log(
-      'Add Versie manually by putting this in your tool\'s MCP config:\n  "versie": { "command": "npx", "args": ["-y", "versie"] }\n'
+      `Add Versie manually by putting this in your tool's MCP config:\n  "versie": { "command": "${entry.command}", "args": ["-y", "versie"] }\n`
     );
     console.log(
       "Supported tools: Claude Desktop, Cursor, Windsurf, Claude Code\nNeed help? support@versie.co"

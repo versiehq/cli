@@ -1,9 +1,8 @@
 import { z } from "zod/v4";
 import { git } from "../git/executor.js";
-import { ensureInitialized, getDeployGap } from "../git/branches.js";
+import { ensureInitialized, getDeployGap, resolveWorkingDir } from "../git/branches.js";
 import { checkIsRepo, checkDeployConfig, checkNoWorktrees } from "../git/safety.js";
 import { listCheckpoints } from "../snapshots/manager.js";
-import { resolveRepoPath } from "../utils/config.js";
 
 export const checkHealthSchema = {
   description:
@@ -17,7 +16,7 @@ export const checkHealthSchema = {
 };
 
 export async function checkHealth(args: z.infer<typeof checkHealthSchema.inputSchema>): Promise<string> {
-  const repoPath = resolveRepoPath(args.repo_path);
+  const repoPath = await resolveWorkingDir(args.repo_path);
 
   // 1. Verify git repo
   const repoCheck = await checkIsRepo(repoPath);

@@ -1,7 +1,8 @@
 import { z } from "zod/v4";
 import { existsSync, readdirSync, readFileSync, writeFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { resolveRepoPath, readConfig } from "../utils/config.js";
+import { resolveWorkingDir } from "../git/branches.js";
+import { readConfig } from "../utils/config.js";
 
 export const deployPlatformHelpSchema = {
   description:
@@ -20,7 +21,7 @@ export const deployPlatformHelpSchema = {
 };
 
 export async function deployPlatformHelp(args: z.infer<typeof deployPlatformHelpSchema.inputSchema>): Promise<string> {
-  const repoPath = resolveRepoPath(args.repo_path);
+  const repoPath = await resolveWorkingDir(args.repo_path);
   const config = readConfig(repoPath);
   const liveBranch = config?.liveBranch ?? "main";
 

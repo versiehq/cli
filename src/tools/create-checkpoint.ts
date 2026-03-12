@@ -1,8 +1,7 @@
 import { z } from "zod/v4";
 import { git } from "../git/executor.js";
-import { ensureOnDev } from "../git/branches.js";
+import { ensureOnDev, resolveWorkingDir } from "../git/branches.js";
 import { createCheckpoint, listCheckpoints } from "../snapshots/manager.js";
-import { resolveRepoPath } from "../utils/config.js";
 
 export const createCheckpointSchema = {
   description:
@@ -21,7 +20,7 @@ export const createCheckpointSchema = {
 };
 
 export async function createCheckpointTool(args: z.infer<typeof createCheckpointSchema.inputSchema>): Promise<string> {
-  const repoPath = resolveRepoPath(args.repo_path);
+  const repoPath = await resolveWorkingDir(args.repo_path);
   await ensureOnDev(repoPath);
 
   // Save uncommitted changes first

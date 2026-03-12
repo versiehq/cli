@@ -1,8 +1,7 @@
 import { z } from "zod/v4";
 import { git } from "../git/executor.js";
-import { ensureInitialized } from "../git/branches.js";
+import { ensureInitialized, resolveWorkingDir } from "../git/branches.js";
 import { createAutoSnapshot, findCheckpoint } from "../snapshots/manager.js";
-import { resolveRepoPath } from "../utils/config.js";
 
 export const goBackToSchema = {
   description:
@@ -27,7 +26,7 @@ const LIVE_PATTERNS =
   /\b(live|deployed|production|what.s live|current site|last deploy|last release)\b/i;
 
 export async function goBackTo(args: z.infer<typeof goBackToSchema.inputSchema>): Promise<string> {
-  const repoPath = resolveRepoPath(args.repo_path);
+  const repoPath = await resolveWorkingDir(args.repo_path);
   const config = await ensureInitialized(repoPath);
   const target = args.target;
 

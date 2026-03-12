@@ -9,6 +9,7 @@ vi.mock("../../git/executor.js", () => ({
 vi.mock("../../git/branches.js", () => ({
   ensureInitialized: vi.fn(),
   getDeployGap: vi.fn(),
+  resolveWorkingDir: vi.fn(),
 }));
 
 vi.mock("../../git/safety.js", () => ({
@@ -27,11 +28,10 @@ vi.mock("../../tools/save-my-work.js", () => ({
 vi.mock("../../utils/config.js", () => ({
   readConfig: vi.fn(),
   writeConfig: vi.fn(),
-  resolveRepoPath: (p?: string) => p ?? "/cwd",
 }));
 
 import { git } from "../../git/executor.js";
-import { ensureInitialized, getDeployGap } from "../../git/branches.js";
+import { ensureInitialized, getDeployGap, resolveWorkingDir } from "../../git/branches.js";
 import { checkNoWorktrees } from "../../git/safety.js";
 import { createReleaseTag } from "../../snapshots/manager.js";
 import { saveMyWork } from "../../tools/save-my-work.js";
@@ -40,6 +40,7 @@ import { shipIt } from "../../tools/ship-it.js";
 const mockGit = vi.mocked(git);
 const mockEnsureInitialized = vi.mocked(ensureInitialized);
 const mockGetDeployGap = vi.mocked(getDeployGap);
+const mockResolveWorkingDir = vi.mocked(resolveWorkingDir);
 const mockCheckNoWorktrees = vi.mocked(checkNoWorktrees);
 const mockCreateReleaseTag = vi.mocked(createReleaseTag);
 const mockSaveMyWork = vi.mocked(saveMyWork);
@@ -56,6 +57,7 @@ const REPO = "/fake/repo";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockResolveWorkingDir.mockResolvedValue(REPO);
   mockEnsureInitialized.mockResolvedValue(CONFIG);
   mockCheckNoWorktrees.mockResolvedValue({ ok: true });
   mockCreateReleaseTag.mockResolvedValue("versie/release/v1");

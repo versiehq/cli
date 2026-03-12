@@ -1,7 +1,6 @@
 import { z } from "zod/v4";
 import { git } from "../git/executor.js";
-import { ensureInitialized } from "../git/branches.js";
-import { resolveRepoPath } from "../utils/config.js";
+import { ensureInitialized, resolveWorkingDir } from "../git/branches.js";
 
 export const projectTimelineSchema = {
   description:
@@ -27,7 +26,7 @@ interface TimelineEntry {
 }
 
 export async function projectTimeline(args: z.infer<typeof projectTimelineSchema.inputSchema>): Promise<string> {
-  const repoPath = resolveRepoPath(args.repo_path);
+  const repoPath = await resolveWorkingDir(args.repo_path);
   const config = await ensureInitialized(repoPath);
 
   // Fetch work history, release tags, and checkpoints in parallel

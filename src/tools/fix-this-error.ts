@@ -1,8 +1,7 @@
 import { z } from "zod/v4";
 import { git } from "../git/executor.js";
-import { ensureInitialized } from "../git/branches.js";
+import { ensureInitialized, resolveWorkingDir } from "../git/branches.js";
 import { createAutoSnapshot } from "../snapshots/manager.js";
-import { resolveRepoPath } from "../utils/config.js";
 import { PATTERNS, type ErrorPattern } from "../errors/patterns.js";
 
 export const fixThisErrorSchema = {
@@ -22,7 +21,7 @@ export const fixThisErrorSchema = {
 };
 
 export async function fixThisError(args: z.infer<typeof fixThisErrorSchema.inputSchema>): Promise<string> {
-  const repoPath = resolveRepoPath(args.repo_path);
+  const repoPath = await resolveWorkingDir(args.repo_path);
   const config = await ensureInitialized(repoPath);
   const errorText = args.error_message;
 

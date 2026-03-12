@@ -9,21 +9,22 @@ vi.mock("../../git/executor.js", () => ({
 vi.mock("../../git/branches.js", () => ({
   ensureOnDev: vi.fn(),
   getDeployGap: vi.fn(),
+  resolveWorkingDir: vi.fn(),
 }));
 
 vi.mock("../../utils/config.js", () => ({
   readConfig: vi.fn(),
   writeConfig: vi.fn(),
-  resolveRepoPath: (p?: string) => p ?? "/cwd",
 }));
 
 import { git } from "../../git/executor.js";
-import { ensureOnDev, getDeployGap } from "../../git/branches.js";
+import { ensureOnDev, getDeployGap, resolveWorkingDir } from "../../git/branches.js";
 import { saveMyWork } from "../../tools/save-my-work.js";
 
 const mockGit = vi.mocked(git);
 const mockEnsureOnDev = vi.mocked(ensureOnDev);
 const mockGetDeployGap = vi.mocked(getDeployGap);
+const mockResolveWorkingDir = vi.mocked(resolveWorkingDir);
 
 function ok(stdout = ""): GitResult {
   return { stdout, stderr: "", exitCode: 0 };
@@ -37,6 +38,7 @@ const REPO = "/fake/repo";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockResolveWorkingDir.mockResolvedValue(REPO);
   mockEnsureOnDev.mockResolvedValue(CONFIG);
   mockGetDeployGap.mockResolvedValue({ count: 1, summaries: ["Updated footer"] });
 });
