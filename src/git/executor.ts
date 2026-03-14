@@ -17,6 +17,7 @@ export async function git(args: string[], cwd: string): Promise<GitResult> {
       cwd,
       timeout: 30_000,
       maxBuffer: 10 * 1024 * 1024,
+      env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
     });
     return { stdout: stdout.trim(), stderr: stderr.trim(), exitCode: 0 };
   } catch (err: unknown) {

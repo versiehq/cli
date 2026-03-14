@@ -7,6 +7,7 @@ vi.mock("../../git/executor.js", () => ({
 }));
 
 vi.mock("../../git/branches.js", () => ({
+  checkFirstRun: vi.fn(),
   ensureInitialized: vi.fn(),
   resolveWorkingDir: vi.fn(),
 }));
@@ -21,7 +22,7 @@ vi.mock("../../utils/config.js", () => ({
 }));
 
 import { git } from "../../git/executor.js";
-import { ensureInitialized, resolveWorkingDir } from "../../git/branches.js";
+import { checkFirstRun, ensureInitialized, resolveWorkingDir } from "../../git/branches.js";
 import { createAutoSnapshot } from "../../snapshots/manager.js";
 import { fixThisError } from "../../tools/fix-this-error.js";
 
@@ -29,6 +30,7 @@ const mockGit = vi.mocked(git);
 const mockEnsureInitialized = vi.mocked(ensureInitialized);
 const mockCreateAutoSnapshot = vi.mocked(createAutoSnapshot);
 const mockResolveWorkingDir = vi.mocked(resolveWorkingDir);
+const mockCheckFirstRun = vi.mocked(checkFirstRun);
 
 function ok(stdout = ""): GitResult {
   return { stdout, stderr: "", exitCode: 0 };
@@ -43,6 +45,7 @@ const REPO = "/fake/repo";
 beforeEach(() => {
   vi.clearAllMocks();
   mockResolveWorkingDir.mockResolvedValue(REPO);
+  mockCheckFirstRun.mockResolvedValue(null);
   mockEnsureInitialized.mockResolvedValue(CONFIG);
   mockCreateAutoSnapshot.mockResolvedValue("versie/snapshot/2024-01-01T00-00-00-000Z");
 });

@@ -4,6 +4,8 @@ import { join } from "node:path";
 export interface VersieConfig {
   liveBranch: string;
   devBranch: string;
+  verbose?: boolean;        // default false — brief output; set true for detailed output
+  showGitCommands?: boolean; // default false — append underlying git commands to output
 }
 
 const CONFIG_DIR = ".versie";

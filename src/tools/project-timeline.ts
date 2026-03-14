@@ -1,10 +1,10 @@
 import { z } from "zod/v4";
 import { git } from "../git/executor.js";
-import { ensureInitialized, resolveWorkingDir } from "../git/branches.js";
+import { checkFirstRun, ensureInitialized, resolveWorkingDir } from "../git/branches.js";
 
 export const projectTimelineSchema = {
   description:
-    "Show your project history — both your work saves and what's been deployed live.",
+    "Say 'show my timeline' to see your project history — saves, checkpoints, and everything shipped live.",
   inputSchema: z.object({
     period: z
       .string()
@@ -13,98 +13,56 @@ export const projectTimelineSchema = {
     repo_path: z
       .string()
       .optional()
-      .describe("Path to your project folder. Uses current directory if not provided."),
+      .describe("Absolute path to the project. Auto-set in Claude Code; ask the user in Claude Desktop."),
   }),
 };
 
-interface TimelineEntry {
-  hash: string;
-  message: string;
-  date: string;
-  type: "work" | "deploy" | "checkpoint";
-  tag?: string;
+interface Entry {
+  ts: number;
+  display: string;
 }
 
 export async function projectTimeline(args: z.infer<typeof projectTimelineSchema.inputSchema>): Promise<string> {
   const repoPath = await resolveWorkingDir(args.repo_path);
+  const welcome = await checkFirstRun(repoPath);
+  if (welcome) return welcome;
   const config = await ensureInitialized(repoPath);
 
-  // Fetch work history, release tags, and checkpoints in parallel
+  // Fetch all three streams in parallel, including unix timestamps for sorting
   const [workLog, releaseTags, checkpointTags] = await Promise.all([
-    git(["log", config.devBranch, "--format=%H|%s|%ar", "-30"], repoPath),
-    git(["tag", "-l", "versie/release/*", "--sort=-creatordate", "--format=%(refname:short)|%(subject)|%(creatordate:relative)"], repoPath),
-    git(["tag", "-l", "versie/checkpoint/*", "--sort=-creatordate", "--format=%(refname:short)|%(subject)|%(creatordate:relative)"], repoPath),
+    git(["log", config.devBranch, "--format=%s|%ar|%ct", "-30"], repoPath),
+    git(["tag", "-l", "versie/release/*", "--sort=-creatordate", "--format=%(refname:short)|%(creatordate:relative)|%(creatordate:format:%s)"], repoPath),
+    git(["tag", "-l", "versie/checkpoint/*", "--sort=-creatordate", "--format=%(refname:short)|%(subject)|%(creatordate:relative)|%(creatordate:format:%s)"], repoPath),
   ]);
 
-  const workEntries: TimelineEntry[] = workLog.stdout
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => {
-      const [hash, message, date] = line.split("|");
-      return { hash, message: message ?? "", date: date ?? "", type: "work" as const };
-    });
+  const entries: Entry[] = [];
 
-  const deployEntries: TimelineEntry[] = releaseTags.stdout
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => {
-      const [tag, , date] = line.split("|");
-      const version = tag?.replace("versie/release/", "") ?? "";
-      return { hash: tag ?? "", message: `Deployed to live (${version})`, date: date ?? "", type: "deploy" as const, tag };
-    });
+  for (const line of workLog.stdout.split("\n").filter(Boolean)) {
+    const [message, relDate, ts] = line.split("|");
+    entries.push({ ts: Number(ts), display: `○ ${relDate} — ${message}` });
+  }
 
-  const checkpointEntries: TimelineEntry[] = checkpointTags.stdout
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => {
-      const [tag, name, date] = line.split("|");
-      return {
-        hash: tag ?? "",
-        message: `★ Checkpoint: ${name ?? tag?.replace("versie/checkpoint/", "") ?? ""}`,
-        date: date ?? "",
-        type: "checkpoint" as const,
-        tag,
-      };
-    });
+  for (const line of releaseTags.stdout.split("\n").filter(Boolean)) {
+    const [tag, relDate, ts] = line.split("|");
+    const version = tag?.replace("versie/release/", "") ?? "";
+    entries.push({ ts: Number(ts), display: `● ${relDate} — Shipped live (${version})` });
+  }
 
-  if (workEntries.length === 0 && deployEntries.length === 0) {
+  for (const line of checkpointTags.stdout.split("\n").filter(Boolean)) {
+    const [tag, name, relDate, ts] = line.split("|");
+    const label = name || tag?.replace("versie/checkpoint/", "") || "";
+    entries.push({ ts: Number(ts), display: `★ ${relDate} — Checkpoint: ${label}` });
+  }
+
+  if (entries.length === 0) {
     return "No history yet — save your work to start tracking your progress.";
   }
 
-  // Format dual-track display
-  const lines: string[] = [
-    "YOUR WORK                                    LIVE",
-    "─────────────────────────────────────────────────",
-  ];
+  entries.sort((a, b) => b.ts - a.ts);
 
-  // Show work and deploys interleaved by recency
-  // For text output, show work entries with deploy markers
-  let deployIndex = 0;
-
-  for (const entry of workEntries.slice(0, 20)) {
-    // Show any deploys more recent than this work entry (rough ordering)
-    if (deployIndex < deployEntries.length) {
-      lines.push(`                                             ● ${deployEntries[deployIndex].date} — ${deployEntries[deployIndex].message}`);
-      deployIndex++;
-    }
-
-    const prefix = entry.type === "checkpoint" ? "★" : "○";
-    lines.push(`${prefix} ${entry.date} — ${entry.message}`);
-  }
-
-  // Any remaining deploys
-  while (deployIndex < deployEntries.length) {
-    lines.push(`                                             ● ${deployEntries[deployIndex].date} — ${deployEntries[deployIndex].message}`);
-    deployIndex++;
-  }
-
-  // Show checkpoints separately if any
-  if (checkpointEntries.length > 0) {
-    lines.push("\nCHECKPOINTS");
-    lines.push("───────────");
-    for (const cp of checkpointEntries) {
-      lines.push(`  ${cp.message} (${cp.date})`);
-    }
+  const lines = ["YOUR TIMELINE", "─────────────"];
+  for (const entry of entries.slice(0, 25)) {
+    lines.push(entry.display);
   }
 
   return lines.join("\n");

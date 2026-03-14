@@ -1,13 +1,12 @@
 import { z } from "zod/v4";
 import { git } from "../git/executor.js";
-import { ensureInitialized, resolveWorkingDir } from "../git/branches.js";
+import { checkFirstRun, ensureInitialized, resolveWorkingDir } from "../git/branches.js";
 import { createAutoSnapshot, findCheckpoint } from "../snapshots/manager.js";
 
 export const goBackToSchema = {
   description:
-    "Restore your workspace to an earlier version. Say 'live version' to go back to " +
-    "what's currently deployed. Say a checkpoint name or describe a point in time to " +
-    "restore your work history.",
+    "Say 'go back to [checkpoint name or time]' to restore an earlier version. " +
+    "Say 'go back to live' to reset to what's currently deployed.",
   inputSchema: z.object({
     target: z
       .string()
@@ -18,7 +17,7 @@ export const goBackToSchema = {
     repo_path: z
       .string()
       .optional()
-      .describe("Path to your project folder. Uses current directory if not provided."),
+      .describe("Absolute path to the project. Auto-set in Claude Code; ask the user in Claude Desktop."),
   }),
 };
 
@@ -27,6 +26,8 @@ const LIVE_PATTERNS =
 
 export async function goBackTo(args: z.infer<typeof goBackToSchema.inputSchema>): Promise<string> {
   const repoPath = await resolveWorkingDir(args.repo_path);
+  const welcome = await checkFirstRun(repoPath);
+  if (welcome) return welcome;
   const config = await ensureInitialized(repoPath);
   const target = args.target;
 
@@ -53,9 +54,10 @@ export async function goBackTo(args: z.infer<typeof goBackToSchema.inputSchema>)
       // Local-only repo or push failed — still report success locally
     }
 
+    const gitNote = config.showGitCommands ? `\n(git: reset --hard ${config.liveBranch} · push --force-with-lease)` : "";
     return (
-      `Restored to the live version. Your workspace now matches what's deployed.\n` +
-      `Your previous work was saved as a snapshot in case you need it.`
+      `Restored to the live version. Your workspace now matches what's live.\n` +
+      `Your previous work was saved as a snapshot in case you need it.${gitNote}`
     );
   }
 
@@ -67,10 +69,11 @@ export async function goBackTo(args: z.infer<typeof goBackToSchema.inputSchema>)
     await git(["push", "--force-with-lease", "origin", config.devBranch], repoPath);
 
     const name = checkpoint.replace("versie/checkpoint/", "");
+    const gitNote = config.showGitCommands ? `\n(git: reset --hard ${checkpoint} · push --force-with-lease)` : "";
     return (
       `Restored to checkpoint '${name}'.\n` +
       `Your live app wasn't affected — only your workspace was updated.\n` +
-      `Your previous work was saved as a snapshot in case you need it.`
+      `Your previous work was saved as a snapshot in case you need it.${gitNote}`
     );
   }
 
@@ -106,10 +109,11 @@ export async function goBackTo(args: z.infer<typeof goBackToSchema.inputSchema>)
     await git(["reset", "--hard", match.hash], repoPath);
     await git(["push", "--force-with-lease", "origin", config.devBranch], repoPath);
 
+    const gitNote = config.showGitCommands ? `\n(git: reset --hard ${match.hash} · push --force-with-lease)` : "";
     return (
       `Restored to '${match.message}' (${match.relDate}).\n` +
       `Your live app wasn't affected — only your workspace was updated.\n` +
-      `Your previous work was saved as a snapshot in case you need it.`
+      `Your previous work was saved as a snapshot in case you need it.${gitNote}`
     );
   }
 
@@ -117,7 +121,7 @@ export async function goBackTo(args: z.infer<typeof goBackToSchema.inputSchema>)
   return (
     `I couldn't find '${target}' in your project history.\n\n` +
     `Try:\n` +
-    `  - 'live version' — go back to what's currently deployed\n` +
+    `  - 'live version' — go back to what's currently live\n` +
     `  - A checkpoint name (say 'show my timeline' to see checkpoints)\n` +
     `  - A description like 'before I changed the header'`
   );

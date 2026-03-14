@@ -1,25 +1,25 @@
 import { z } from "zod/v4";
 import { git } from "../git/executor.js";
-import { ensureInitialized, getDeployGap, resolveWorkingDir } from "../git/branches.js";
-import { checkNoWorktrees } from "../git/safety.js";
+import { checkFirstRun, ensureInitialized, getDeployGap, resolveWorkingDir } from "../git/branches.js";
+import { checkNoWorktrees, classifyPushFailure } from "../git/safety.js";
 import { createAutoSnapshot, createReleaseTag } from "../snapshots/manager.js";
 import { saveMyWork } from "./save-my-work.js";
 
 export const shipItSchema = {
   description:
-    "Deploy your current work to the live version. This updates your live app with " +
-    "everything you've saved since your last deploy. Your work is saved first automatically, " +
-    "and a release checkpoint is created so you can always roll back.",
+    "Say 'ship it' to deploy saved work live. Auto-saves first, then pushes everything to the live version.",
   inputSchema: z.object({
     repo_path: z
       .string()
       .optional()
-      .describe("Path to your project folder. Uses current directory if not provided."),
+      .describe("Absolute path to the project. Auto-set in Claude Code; ask the user in Claude Desktop."),
   }),
 };
 
 export async function shipIt(args: z.infer<typeof shipItSchema.inputSchema>): Promise<string> {
   const repoPath = await resolveWorkingDir(args.repo_path);
+  const welcome = await checkFirstRun(repoPath);
+  if (welcome) return welcome;
   const config = await ensureInitialized(repoPath);
 
   // Safety: warn about active worktrees
@@ -37,7 +37,7 @@ export async function shipIt(args: z.infer<typeof shipItSchema.inputSchema>): Pr
   // Step 2: Get deploy gap before merge (pass config to avoid re-reading)
   const gap = await getDeployGap(repoPath, config);
   if (gap.count === 0) {
-    return "Your live app is already up to date — nothing new to deploy.";
+    return "Your live app is already up to date — nothing new to ship.";
   }
 
   // Step 3: Switch to live branch and pull latest
@@ -65,15 +65,24 @@ export async function shipIt(args: z.infer<typeof shipItSchema.inputSchema>): Pr
 
     return (
       `Your work and the live version both changed the same file${files.length !== 1 ? "s" : ""}:${fileList}\n\n` +
-      `I've paused the deploy. Fix the conflicts in those files, then say 'ship it' again.`
+      `I've paused the release. Fix the conflicts in those files, then say 'ship it' again.`
     );
   }
 
   // Step 5: Push live branch
-  const pushResult = await git(["push"], repoPath);
+  let pushResult = await git(["push"], repoPath);
+
+  // First-time push: live branch has no upstream yet — set it automatically
+  if (pushResult.exitCode !== 0 && /no upstream branch|no tracking information|has no upstream/i.test(pushResult.stderr)) {
+    pushResult = await git(["push", "-u", "origin", config.liveBranch], repoPath);
+  }
+
   if (pushResult.exitCode !== 0) {
-    // Push failed — go back to dev and report
     await git(["checkout", config.devBranch], repoPath);
+    const failureMsg = await classifyPushFailure(repoPath, pushResult.stderr);
+    if (failureMsg !== null) {
+      return `Your work is saved, but it didn't go live.\n\n${failureMsg}\n\nOnce that's fixed, say 'ship it' again.`;
+    }
     throw new Error(`Deploy failed while pushing: ${pushResult.stderr}`);
   }
 
@@ -81,15 +90,23 @@ export async function shipIt(args: z.infer<typeof shipItSchema.inputSchema>): Pr
   const releaseTag = await createReleaseTag(repoPath);
   await git(["checkout", config.devBranch], repoPath);
 
-  // Build report
-  const summaryLines =
-    gap.summaries.length > 0
+  const changeCount = `${gap.count} change${gap.count === 1 ? "" : "s"}`;
+
+  const gitNote = config.showGitCommands
+    ? `\n(git: merge ${config.devBranch} → ${config.liveBranch} · push · tag ${releaseTag})`
+    : "";
+
+  if (config.verbose) {
+    const summaryLines = gap.summaries.length > 0
       ? "\n" + gap.summaries.map((s) => `  - ${s}`).join("\n")
       : "";
+    return (
+      `Shipped! ✓ Your live app is updating now.\n` +
+      `Shipped ${changeCount} since you last shipped:${summaryLines}\n` +
+      `\nRelease saved as ${releaseTag} — you can always roll back to this point.${gitNote}`
+    );
+  }
 
-  return (
-    `Shipped! ✓ Your live app is updating now.\n` +
-    `Deployed ${gap.count} change${gap.count === 1 ? "" : "s"} since your last deploy:${summaryLines}\n` +
-    `\nRelease saved as ${releaseTag} — you can always roll back to this point.`
-  );
+  const summary = gap.summaries.length > 0 ? ` — ${gap.summaries.slice(0, 2).join(", ")}${gap.summaries.length > 2 ? "…" : ""}` : "";
+  return `Shipped! ${changeCount} live${summary}. (${releaseTag})${gitNote}`;
 }

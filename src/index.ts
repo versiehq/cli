@@ -46,16 +46,23 @@ function tool<T extends Record<string, unknown>>(
   };
 }
 
-server.registerTool("save_my_work", saveMyWorkSchema, tool(saveMyWork));
-server.registerTool("ship_it", shipItSchema, tool(shipIt));
-server.registerTool("whats_changed", whatsChangedSchema, tool(whatsChanged));
-server.registerTool("go_back_to", goBackToSchema, tool(goBackTo));
-server.registerTool("project_timeline", projectTimelineSchema, tool(projectTimeline));
-server.registerTool("create_checkpoint", createCheckpointSchema, tool(createCheckpointTool));
-server.registerTool("fix_this_error", fixThisErrorSchema, tool(fixThisError));
-server.registerTool("check_health", checkHealthSchema, tool(checkHealth));
-server.registerTool("list_commands", listCommandsSchema, tool(listCommands));
-server.registerTool("deploy_platform_help", deployPlatformHelpSchema, tool(deployPlatformHelp));
+// Append a universal output instruction to every tool description so Claude
+// summarizes rather than repeating the full tool output (which is already shown in the UI).
+const SUMMARIZE = " Summarize the output briefly; do not repeat it verbatim.";
+function withVerbatim<S extends { description: string }>(schema: S): S {
+  return { ...schema, description: schema.description + SUMMARIZE };
+}
+
+server.registerTool("save_my_work", withVerbatim(saveMyWorkSchema), tool(saveMyWork));
+server.registerTool("ship_it", withVerbatim(shipItSchema), tool(shipIt));
+server.registerTool("whats_changed", withVerbatim(whatsChangedSchema), tool(whatsChanged));
+server.registerTool("go_back_to", withVerbatim(goBackToSchema), tool(goBackTo));
+server.registerTool("project_timeline", withVerbatim(projectTimelineSchema), tool(projectTimeline));
+server.registerTool("create_checkpoint", withVerbatim(createCheckpointSchema), tool(createCheckpointTool));
+server.registerTool("fix_this_error", withVerbatim(fixThisErrorSchema), tool(fixThisError));
+server.registerTool("check_health", withVerbatim(checkHealthSchema), tool(checkHealth));
+server.registerTool("list_commands", withVerbatim(listCommandsSchema), tool(listCommands));
+server.registerTool("deploy_platform_help", withVerbatim(deployPlatformHelpSchema), tool(deployPlatformHelp));
 
 async function main(): Promise<void> {
   if (process.argv.includes("--install")) {

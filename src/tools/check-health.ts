@@ -1,26 +1,64 @@
 import { z } from "zod/v4";
 import { git } from "../git/executor.js";
-import { ensureInitialized, getDeployGap, resolveWorkingDir } from "../git/branches.js";
+import { checkFirstRun, ensureInitialized, getDeployGap, resolveWorkingDir } from "../git/branches.js";
 import { checkIsRepo, checkDeployConfig, checkNoWorktrees } from "../git/safety.js";
 import { listCheckpoints } from "../snapshots/manager.js";
+import { readConfig, writeConfig } from "../utils/config.js";
 
 export const checkHealthSchema = {
   description:
-    "Check your project's health — branch status, unsaved changes, deploy gap, and configuration.",
+    "Say 'setup versie', 'check health', 'project health', 'get started', or 'check my project' to initialize or check project status. " +
+    "Say 'turn on/off verbose mode' to toggle detailed output. " +
+    "Say 'show git commands' or 'hide git commands' to toggle showing the underlying git operations.",
   inputSchema: z.object({
+    verbose: z
+      .enum(["on", "off"])
+      .optional()
+      .describe("Set to 'on' to enable verbose output for all tools, 'off' to return to brief output. Only set when user explicitly asks to change verbose mode."),
+    show_git_commands: z
+      .enum(["on", "off"])
+      .optional()
+      .describe("Set to 'on' to show underlying git commands in output, 'off' to hide them. Only set when user explicitly asks to toggle this."),
     repo_path: z
       .string()
       .optional()
-      .describe("Path to your project folder. Uses current directory if not provided."),
+      .describe("Absolute path to the project. Auto-set in Claude Code; ask the user in Claude Desktop."),
   }),
 };
 
 export async function checkHealth(args: z.infer<typeof checkHealthSchema.inputSchema>): Promise<string> {
   const repoPath = await resolveWorkingDir(args.repo_path);
+  const welcome = await checkFirstRun(repoPath);
+  if (welcome) return welcome;
+
+  // Verbose mode toggle
+  if (args.verbose !== undefined) {
+    const config = readConfig(repoPath);
+    if (config) {
+      writeConfig(repoPath, { ...config, verbose: args.verbose === "on" });
+      return args.verbose === "on"
+        ? "Verbose mode on — tools will now show detailed output."
+        : "Verbose mode off — tools will now show brief output.";
+    }
+  }
+
+  // Show git commands toggle
+  if (args.show_git_commands !== undefined) {
+    const config = readConfig(repoPath);
+    if (config) {
+      writeConfig(repoPath, { ...config, showGitCommands: args.show_git_commands === "on" });
+      return args.show_git_commands === "on"
+        ? "Git commands on — tools will now show the underlying git operations in parentheses."
+        : "Git commands off — tools will show plain output again.";
+    }
+  }
 
   // 1. Verify git repo
   const repoCheck = await checkIsRepo(repoPath);
   if (!repoCheck.ok) {
+    if (!args.repo_path) {
+      return "Which project do you want to check? Tell me the folder path (e.g. 'check my project at /Users/me/my-app').";
+    }
     return `⚠ ${repoCheck.message}`;
   }
 
@@ -31,12 +69,12 @@ export async function checkHealth(args: z.infer<typeof checkHealthSchema.inputSc
   const branchResult = await git(["branch", "--show-current"], repoPath);
   const branch = branchResult.stdout;
   if (branch === config.liveBranch) {
-    checks.push(`⚠ You were on the live branch — switched you back to your workspace`);
+    checks.push(`⚠ You were on the live version — switched you back to your workspace`);
     await git(["checkout", config.devBranch], repoPath);
   } else if (branch === config.devBranch) {
     checks.push(`✓ Working in your workspace (${config.devBranch})`);
   } else {
-    checks.push(`⚠ You're on branch '${branch}' — switching to your workspace`);
+    checks.push(`⚠ You're in an unexpected place ('${branch}') — switching to your workspace`);
     await git(["checkout", config.devBranch], repoPath);
   }
 
@@ -63,9 +101,9 @@ export async function checkHealth(args: z.infer<typeof checkHealthSchema.inputSc
   if (gap.count === 0) {
     checks.push(`✓ Your live app is up to date with your latest work`);
   } else if (gap.count <= 5) {
-    checks.push(`ℹ ${gap.count} save${gap.count === 1 ? "" : "s"} not yet deployed — say 'ship it' when ready`);
+    checks.push(`ℹ ${gap.count} save${gap.count === 1 ? "" : "s"} not yet shipped — say 'ship it' when ready`);
   } else {
-    checks.push(`⚠ ${gap.count} saves not yet deployed — consider deploying soon`);
+    checks.push(`⚠ ${gap.count} saves not yet shipped — consider shipping soon`);
   }
 
   // 5. Remote connection

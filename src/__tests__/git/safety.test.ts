@@ -72,7 +72,7 @@ describe("checkNoWorktrees", () => {
     expect(await checkNoWorktrees(dir)).toEqual({ ok: true });
   });
 
-  it("returns not ok when additional worktrees are present", async () => {
+  it("returns not ok when additional user worktrees are present", async () => {
     mockGit.mockResolvedValue(
       ok(
         "worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n" +
@@ -82,6 +82,28 @@ describe("checkNoWorktrees", () => {
     const result = await checkNoWorktrees(dir);
     expect(result.ok).toBe(false);
     expect(result.message).toMatch(/worktree/i);
+  });
+
+  it("returns ok when the only extra worktrees are Claude's auto-created ones", async () => {
+    mockGit.mockResolvedValue(
+      ok(
+        "worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n" +
+          "worktree /repo/.claude/worktrees/blissful-poitras\nHEAD def456\ndetached"
+      )
+    );
+    expect(await checkNoWorktrees(dir)).toEqual({ ok: true });
+  });
+
+  it("returns not ok when both Claude and user worktrees are present", async () => {
+    mockGit.mockResolvedValue(
+      ok(
+        "worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n" +
+          "worktree /repo/.claude/worktrees/blissful-poitras\nHEAD def456\ndetached\n\n" +
+          "worktree /other\nHEAD ghi789\nbranch refs/heads/feature"
+      )
+    );
+    const result = await checkNoWorktrees(dir);
+    expect(result.ok).toBe(false);
   });
 });
 

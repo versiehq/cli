@@ -1,12 +1,12 @@
 import { z } from "zod/v4";
 import { existsSync, readdirSync, readFileSync, writeFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { resolveWorkingDir } from "../git/branches.js";
+import { checkFirstRun, resolveWorkingDir } from "../git/branches.js";
 import { readConfig } from "../utils/config.js";
 
 export const deployPlatformHelpSchema = {
   description:
-    "Get help configuring your deploy platform (Vercel, Netlify, Railway, etc.) " +
+    "Say 'help with my deploy' to configure Vercel, Netlify, Railway, or Render " +
     "to only deploy when you say 'ship it', not on every save.",
   inputSchema: z.object({
     platform: z
@@ -16,12 +16,14 @@ export const deployPlatformHelpSchema = {
     repo_path: z
       .string()
       .optional()
-      .describe("Path to your project folder. Uses current directory if not provided."),
+      .describe("Absolute path to the project. Auto-set in Claude Code; ask the user in Claude Desktop."),
   }),
 };
 
 export async function deployPlatformHelp(args: z.infer<typeof deployPlatformHelpSchema.inputSchema>): Promise<string> {
   const repoPath = await resolveWorkingDir(args.repo_path);
+  const welcome = await checkFirstRun(repoPath);
+  if (welcome) return welcome;
   const config = readConfig(repoPath);
   const liveBranch = config?.liveBranch ?? "main";
 

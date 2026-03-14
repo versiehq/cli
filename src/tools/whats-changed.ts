@@ -1,11 +1,11 @@
 import { z } from "zod/v4";
 import { git } from "../git/executor.js";
-import { ensureOnDev, getDeployGap, resolveWorkingDir } from "../git/branches.js";
+import { checkFirstRun, ensureOnDev, getDeployGap, resolveWorkingDir } from "../git/branches.js";
 
 export const whatsChangedSchema = {
   description:
-    "See what's changed. Ask 'since last save' to see uncommitted changes, " +
-    "or 'since last deploy' to see what you've built that isn't live yet.",
+    "Say 'what's changed' or 'what's not live yet' to see changes. " +
+    "Ask 'since last save' for uncommitted changes, or 'since last ship' for what's saved but not live yet.",
   inputSchema: z.object({
     since: z
       .enum(["last save", "last deploy"])
@@ -14,32 +14,36 @@ export const whatsChangedSchema = {
     repo_path: z
       .string()
       .optional()
-      .describe("Path to your project folder. Uses current directory if not provided."),
+      .describe("Absolute path to the project. Auto-set in Claude Code; ask the user in Claude Desktop."),
   }),
 };
 
 export async function whatsChanged(args: z.infer<typeof whatsChangedSchema.inputSchema>): Promise<string> {
   const repoPath = await resolveWorkingDir(args.repo_path);
+  const welcome = await checkFirstRun(repoPath);
+  if (welcome) return welcome;
   const config = await ensureOnDev(repoPath);
 
   const mode = args.since ?? "last save";
 
   if (mode === "last deploy") {
     const gap = await getDeployGap(repoPath, config);
+    const gitNote = config.showGitCommands ? `\n(git: log ${config.liveBranch}..${config.devBranch})` : "";
     if (gap.count === 0) {
-      return "Everything you've saved is already live — nothing new since your last deploy.";
+      return `Everything you've saved is already live — nothing new to ship.${gitNote}`;
     }
     const lines = gap.summaries.map((s) => `  - ${s}`).join("\n");
     return (
-      `Here's what you've built since your last deploy:\n${lines}\n\n` +
-      `${gap.count} save${gap.count === 1 ? "" : "s"} ready to go live. Say 'ship it' to deploy.`
+      `Here's what you've saved since you last shipped:\n${lines}\n\n` +
+      `${gap.count} save${gap.count === 1 ? "" : "s"} ready to go live. Say 'ship it' when ready.${gitNote}`
     );
   }
 
   // Default: uncommitted changes since last save
   const statusResult = await git(["status", "--porcelain"], repoPath);
+  const gitNote = config.showGitCommands ? `\n(git: status)` : "";
   if (!statusResult.stdout.trim()) {
-    return "No changes since your last save — everything is saved.";
+    return `No changes since your last save — everything is saved.${gitNote}`;
   }
 
   const [diffResult, stagedResult] = await Promise.all([
@@ -52,5 +56,5 @@ export async function whatsChanged(args: z.infer<typeof whatsChangedSchema.input
   if (diffResult.stdout.trim()) parts.push(diffResult.stdout.trim());
 
   const summary = parts.join("\n") || statusResult.stdout;
-  return `Changes since your last save:\n${summary}\n\nSay 'save my work' to save these.`;
+  return `Changes since your last save:\n${summary}\n\nSay 'save my work' to save these.${gitNote}`;
 }

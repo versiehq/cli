@@ -1,11 +1,11 @@
 import { z } from "zod/v4";
 import { git } from "../git/executor.js";
-import { ensureOnDev, resolveWorkingDir } from "../git/branches.js";
+import { checkFirstRun, ensureOnDev, resolveWorkingDir } from "../git/branches.js";
 import { createCheckpoint, listCheckpoints } from "../snapshots/manager.js";
 
 export const createCheckpointSchema = {
   description:
-    "Create a named bookmark so you can always return to this exact point. " +
+    "Say 'create a checkpoint' to bookmark this moment so you can always return to it. " +
     "Great for marking milestones before making big changes.",
   inputSchema: z.object({
     name: z
@@ -15,13 +15,15 @@ export const createCheckpointSchema = {
     repo_path: z
       .string()
       .optional()
-      .describe("Path to your project folder. Uses current directory if not provided."),
+      .describe("Absolute path to the project. Auto-set in Claude Code; ask the user in Claude Desktop."),
   }),
 };
 
 export async function createCheckpointTool(args: z.infer<typeof createCheckpointSchema.inputSchema>): Promise<string> {
   const repoPath = await resolveWorkingDir(args.repo_path);
-  await ensureOnDev(repoPath);
+  const welcome = await checkFirstRun(repoPath);
+  if (welcome) return welcome;
+  const config = await ensureOnDev(repoPath);
 
   // Save uncommitted changes first
   const statusResult = await git(["status", "--porcelain"], repoPath);
@@ -47,5 +49,6 @@ export async function createCheckpointTool(args: z.infer<typeof createCheckpoint
     ? "\n\nYou're now at the 5-checkpoint limit. Upgrade to Pro for unlimited checkpoints — versie.co."
     : "";
 
-  return `Checkpoint '${args.name}' saved — you can always return to this point.${limitNote}`;
+  const gitNote = config.showGitCommands ? `\n(git: tag versie/checkpoint/${args.name})` : "";
+  return `Checkpoint '${args.name}' saved — you can always return to this point.${limitNote}${gitNote}`;
 }

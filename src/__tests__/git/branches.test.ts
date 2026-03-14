@@ -68,24 +68,59 @@ describe("getDeployGap", () => {
 
 describe("ensureOnDev", () => {
   it("does not switch branch when already on versie-dev", async () => {
-    mockGit.mockResolvedValue(ok("versie-dev"));
+    mockGit
+      .mockResolvedValueOnce(ok("versie-dev")) // branch --show-current
+      .mockResolvedValueOnce(ok("origin")); // git config branch.versie-dev.remote — already set
+
     await ensureOnDev(REPO, CONFIG);
-    // Only one call: branch --show-current
-    expect(mockGit).toHaveBeenCalledTimes(1);
     expect(mockGit).toHaveBeenCalledWith(["branch", "--show-current"], REPO);
+    expect(mockGit).not.toHaveBeenCalledWith(["checkout", "versie-dev"], REPO);
   });
 
   it("switches to versie-dev when on a different branch", async () => {
     mockGit
       .mockResolvedValueOnce(ok("main")) // branch --show-current
-      .mockResolvedValueOnce(ok()); // checkout versie-dev
+      .mockResolvedValueOnce(ok()) // checkout versie-dev
+      .mockResolvedValueOnce(ok("origin")); // git config branch.versie-dev.remote — set
 
     await ensureOnDev(REPO, CONFIG);
-    expect(mockGit).toHaveBeenLastCalledWith(["checkout", "versie-dev"], REPO);
+    expect(mockGit).toHaveBeenCalledWith(["checkout", "versie-dev"], REPO);
+  });
+
+  it("writes tracking config when upstream is not set", async () => {
+    mockGit
+      .mockResolvedValueOnce(ok("versie-dev")) // branch --show-current
+      .mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 1 }) // git config branch.versie-dev.remote — not set
+      .mockResolvedValueOnce(ok()) // git config branch.versie-dev.remote origin
+      .mockResolvedValueOnce(ok()); // git config branch.versie-dev.merge refs/heads/versie-dev
+
+    await ensureOnDev(REPO, CONFIG);
+    expect(mockGit).toHaveBeenCalledWith(
+      ["config", "branch.versie-dev.remote", "origin"],
+      REPO
+    );
+    expect(mockGit).toHaveBeenCalledWith(
+      ["config", "branch.versie-dev.merge", "refs/heads/versie-dev"],
+      REPO
+    );
+  });
+
+  it("does not write tracking config when upstream is already set", async () => {
+    mockGit
+      .mockResolvedValueOnce(ok("versie-dev")) // branch --show-current
+      .mockResolvedValueOnce(ok("origin")); // git config branch.versie-dev.remote — already set
+
+    await ensureOnDev(REPO, CONFIG);
+    expect(mockGit).not.toHaveBeenCalledWith(
+      expect.arrayContaining(["config", "branch.versie-dev.remote", "origin"]),
+      REPO
+    );
   });
 
   it("returns the config", async () => {
-    mockGit.mockResolvedValue(ok("versie-dev"));
+    mockGit
+      .mockResolvedValueOnce(ok("versie-dev"))
+      .mockResolvedValueOnce(ok("origin"));
     const result = await ensureOnDev(REPO, CONFIG);
     expect(result).toEqual(CONFIG);
   });

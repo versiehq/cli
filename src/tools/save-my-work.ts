@@ -1,11 +1,12 @@
 import { z } from "zod/v4";
 import { git } from "../git/executor.js";
-import { ensureOnDev, getDeployGap, resolveWorkingDir } from "../git/branches.js";
+import { checkFirstRun, ensureOnDev, getDeployGap, resolveWorkingDir, isClaudeWorktree } from "../git/branches.js";
+import { classifyPushFailure } from "../git/safety.js";
 
 export const saveMyWorkSchema = {
   description:
-    "Save your current progress. Your work is saved to your workspace — " +
-    "your live app won't change until you say 'ship it'.",
+    "Say 'save my work' to save current progress. " +
+    "Your work is saved to your workspace — your live app won't change until you say 'ship it'.",
   inputSchema: z.object({
     description: z
       .string()
@@ -14,12 +15,15 @@ export const saveMyWorkSchema = {
     repo_path: z
       .string()
       .optional()
-      .describe("Path to your project folder. Uses current directory if not provided."),
+      .describe("Absolute path to the project. Auto-set in Claude Code; ask the user in Claude Desktop."),
   }),
 };
 
 export async function saveMyWork(args: z.infer<typeof saveMyWorkSchema.inputSchema>): Promise<string> {
+  const inWorktree = isClaudeWorktree(args.repo_path);
   const repoPath = await resolveWorkingDir(args.repo_path);
+  const welcome = await checkFirstRun(repoPath);
+  if (welcome) return welcome;
   const config = await ensureOnDev(repoPath);
 
   // Check for changes
@@ -44,12 +48,20 @@ export async function saveMyWork(args: z.infer<typeof saveMyWorkSchema.inputSche
     throw new Error(`Save failed: ${commitResult.stderr}`);
   }
 
-  // Push to dev branch
-  const pushResult = await git(["push", "origin", config.devBranch], repoPath);
+  const fileCount = countFiles(statusResult.stdout);
+  const savedMsg = `Saved on your computer! ${fileCount} file${fileCount === 1 ? "" : "s"} updated — ${message}.`;
+
+  // Push to dev branch, setting upstream tracking so plain `git push` works in terminal
+  const pushResult = await git(["push", "-u", "origin", config.devBranch], repoPath);
   if (pushResult.exitCode !== 0) {
-    // Try pull --rebase then push again
+    const failureMsg = await classifyPushFailure(repoPath, pushResult.stderr);
+    if (failureMsg !== null) {
+      return `${savedMsg}\n\n${failureMsg}`;
+    }
+
+    // Likely diverged history — try pull --rebase then retry
     await git(["pull", "--rebase", "origin", config.devBranch], repoPath);
-    const retryPush = await git(["push", "origin", config.devBranch], repoPath);
+    const retryPush = await git(["push", "-u", "origin", config.devBranch], repoPath);
     if (retryPush.exitCode !== 0) {
       throw new Error(
         `Saved locally but couldn't sync to GitHub: ${retryPush.stderr}`
@@ -59,13 +71,17 @@ export async function saveMyWork(args: z.infer<typeof saveMyWorkSchema.inputSche
 
   // Get deploy gap for context (pass config to avoid re-reading)
   const gap = await getDeployGap(repoPath, config);
-  const fileCount = countFiles(statusResult.stdout);
   const gapNote =
     gap.count > 1
-      ? `\n${gap.count} saves waiting to deploy — say 'ship it' when ready.`
+      ? `\n${gap.count} saves ready to ship — say 'ship it' when ready.`
       : "";
 
-  return `Saved! ${fileCount} file${fileCount === 1 ? "" : "s"} updated — ${message}. (Your live app wasn't affected.)${gapNote}`;
+  const worktreeNote = inWorktree
+    ? "\n\n(You're working through Claude's session — saves always go to your workspace, not your live app. Say 'ship it' when you're ready to go live.)"
+    : "";
+
+  const gitNote = config.showGitCommands ? `\n(git: add · commit · push origin ${config.devBranch})` : "";
+  return `Saved! ${fileCount} file${fileCount === 1 ? "" : "s"} updated — ${message}. (Your live app wasn't affected.)${gapNote}${worktreeNote}${gitNote}`;
 }
 
 function generateMessage(diffStat: string): string {

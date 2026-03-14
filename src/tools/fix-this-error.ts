@@ -1,13 +1,13 @@
 import { z } from "zod/v4";
 import { git } from "../git/executor.js";
-import { ensureInitialized, resolveWorkingDir } from "../git/branches.js";
+import { checkFirstRun, ensureInitialized, resolveWorkingDir } from "../git/branches.js";
 import { createAutoSnapshot } from "../snapshots/manager.js";
 import { PATTERNS, type ErrorPattern } from "../errors/patterns.js";
 
 export const fixThisErrorSchema = {
   description:
-    "Diagnose and fix a Git error. Paste the error message and Versie will explain " +
-    "what happened and fix it automatically.",
+    "Say 'fix this error: [message]' to diagnose and fix a Git error automatically. " +
+    "Paste the error message and Versie will explain what happened and fix it.",
   inputSchema: z.object({
     error_message: z
       .string()
@@ -16,12 +16,14 @@ export const fixThisErrorSchema = {
     repo_path: z
       .string()
       .optional()
-      .describe("Path to your project folder. Uses current directory if not provided."),
+      .describe("Absolute path to the project. Auto-set in Claude Code; ask the user in Claude Desktop."),
   }),
 };
 
 export async function fixThisError(args: z.infer<typeof fixThisErrorSchema.inputSchema>): Promise<string> {
   const repoPath = await resolveWorkingDir(args.repo_path);
+  const welcome = await checkFirstRun(repoPath);
+  if (welcome) return welcome;
   const config = await ensureInitialized(repoPath);
   const errorText = args.error_message;
 

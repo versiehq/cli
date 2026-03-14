@@ -30,12 +30,22 @@ export async function checkCleanWorkdir(repoPath: string): Promise<SafetyCheck> 
   return { ok: true };
 }
 
-/** Check for active worktrees beyond the main one */
+/** Check for active worktrees beyond the main one.
+ * Claude Code/Desktop auto-creates worktrees at .claude/worktrees/ — these are
+ * invisible conversation workspaces and are excluded from this check. */
 export async function checkNoWorktrees(repoPath: string): Promise<SafetyCheck> {
   const result = await git(["worktree", "list", "--porcelain"], repoPath);
   const entries = result.stdout.split("\n\n").filter((e) => e.includes("worktree "));
-  if (entries.length > 1) {
-    logger.debug(`Active worktrees detected: ${entries.length}`);
+
+  // Filter out Claude's auto-created conversation worktrees
+  const userWorktrees = entries.filter((e) => {
+    const pathLine = e.split("\n").find((l) => l.startsWith("worktree "));
+    const wPath = pathLine?.replace("worktree ", "") ?? "";
+    return !wPath.includes("/.claude/worktrees/");
+  });
+
+  if (userWorktrees.length > 1) {
+    logger.debug(`Active user worktrees detected: ${userWorktrees.length}`);
     return {
       ok: false,
       message:
@@ -45,6 +55,45 @@ export async function checkNoWorktrees(repoPath: string): Promise<SafetyCheck> {
     };
   }
   return { ok: true };
+}
+
+/**
+ * Classify a push failure by checking the remote URL type (SSH vs HTTPS).
+ * Returns a user-friendly message, or null if the failure looks like a
+ * diverged-history rejection that a rebase retry might fix.
+ */
+export async function classifyPushFailure(repoPath: string, stderr: string): Promise<string | null> {
+  const remoteResult = await git(["remote", "get-url", "origin"], repoPath);
+
+  if (remoteResult.exitCode !== 0) {
+    return (
+      "This project isn't connected to GitHub yet, so it can only be saved on your computer. " +
+      "Go to github.com/new to create a repository, then follow the setup instructions to link it."
+    );
+  }
+
+  const remoteUrl = remoteResult.stdout.trim();
+  const isSsh = remoteUrl.startsWith("git@") || remoteUrl.startsWith("ssh://");
+  const isAuthError = /could not read Username|Authentication failed|Device not configured|Permission denied \(publickey\)|Repository not found/i.test(stderr);
+
+  if (!isAuthError) {
+    // Likely a diverged-history rejection — let the caller retry with rebase
+    return null;
+  }
+
+  if (isSsh) {
+    return (
+      "Couldn't sync to GitHub — your SSH key may not be authorized for this repository.\n\n" +
+      "To check, open a terminal and run: ssh -T git@github.com\n" +
+      "For setup help: docs.github.com/authentication/connecting-to-github-with-ssh"
+    );
+  }
+
+  return (
+    "Couldn't sync to GitHub — it looks like you're not signed in on this computer.\n\n" +
+    "If you have the GitHub CLI installed, run: gh auth login\n" +
+    "Or check the Source Control panel in your editor to sign in to GitHub."
+  );
 }
 
 /** Check if a remote is configured */
