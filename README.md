@@ -25,7 +25,7 @@ No Git knowledge required. No branches to manage. No commands to memorize.
 **Option A — Automatic (recommended):**
 
 ```
-npx versie --install
+npx versie-mcp --install
 ```
 
 Then restart your AI tool. Versie will introduce itself the next time you open a project.
@@ -39,7 +39,7 @@ Add one entry to your MCP client config:
   "mcpServers": {
     "versie": {
       "command": "npx",
-      "args": ["-y", "versie"]
+      "args": ["-y", "versie-mcp"]
     }
   }
 }
@@ -63,16 +63,16 @@ Versie understands plain English. You don't need to remember exact commands.
 | Say something like... | What happens |
 |---|---|
 | *"Save my work"* | Your progress is saved. Live app unchanged. |
-| *"Ship it"* | Everything saved since your last deploy goes live. |
-| *"Save and ship"* | Saves and deploys in one step. |
+| *"Ship it"* | Everything saved since you last shipped goes live. |
+| *"Save and ship"* | Saves and ships in one step. |
 | *"What have I changed?"* | See what's new since your last save. |
-| *"What's not live yet?"* | See what's saved but not deployed. |
+| *"What's not live yet?"* | See what's saved but not yet shipped. |
 | *"Go back to yesterday"* | Restore to any previous version. |
-| *"Go back to the live version"* | Undo everything back to what's deployed. |
+| *"Go back to the live version"* | Undo everything back to what's live. |
 | *"Create a checkpoint called mvp"* | Bookmark this moment by name. |
-| *"Check my project health"* | Full status: saves, deploys, any issues. |
+| *"Check my project health"* | Full status: saves, ships, any issues. |
 | *"What can Versie do?"* | See all available commands. |
-| *"Help with my deploy setup"* | Configure Vercel, Netlify, Railway, or GitHub Actions. |
+| *"Help with shipping setup"* | Configure Vercel, Netlify, Railway, or GitHub Actions. |
 
 ---
 
@@ -91,7 +91,7 @@ You say "save my work"
 → Progress saved. Live app unchanged. ✓
 
 You say "ship it"
-→ Live app updates with everything since your last deploy. ✓
+→ Live app updates with everything since you last shipped. ✓
 
 You say "go back to last Tuesday"
 → Restored. Live app unchanged. ✓
@@ -115,7 +115,7 @@ Pro is a subscription — see [versie.co](https://versie.co) for current pricing
 
 ## Using the MCP server and skill together
 
-Don't install both in the same tool at the same time. They do the same thing — if both are active, every operation runs twice (two saves, two deploys, duplicate tags).
+Don't install both in the same tool at the same time. They do the same thing — if both are active, every operation runs twice (two saves, two ships, duplicate tags).
 
 Pick one:
 - **MCP server** — any MCP-compatible tool, works across sessions, recommended
@@ -127,11 +127,11 @@ If you're switching from the skill, remove the `versie` folder from `.claude/ski
 
 ## Before you use "ship it"
 
-Versie deploys by pushing to your main branch. For this to update your live app, your deploy platform needs to be watching main — and main only.
+Versie ships by pushing to your main branch. For this to update your live app, your shipping platform needs to be watching main — and main only.
 
-Vercel users: you're already protected by default. If you're on Netlify, Railway, Render, or using GitHub Actions, confirm that only your main branch triggers a deploy. If it's set to all branches, Versie's workspace saves will go live too, breaking the separation.
+Vercel users: you're already protected by default. If you're on Netlify, Railway, Render, or using GitHub Actions, confirm that only your main branch triggers a live update. If it's set to all branches, Versie's workspace saves will go live too, breaking the separation.
 
-Say "help with my deploy setup" inside your AI tool and Versie will walk you through it for your specific platform.
+Say "help with shipping setup" inside your AI tool and Versie will walk you through it for your specific platform.
 
 ---
 
