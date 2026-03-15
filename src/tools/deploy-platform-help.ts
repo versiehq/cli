@@ -6,17 +6,17 @@ import { readConfig } from "../utils/config.js";
 
 export const deployPlatformHelpSchema = {
   description:
-    "Say 'help with my deploy' to configure Vercel, Netlify, Railway, or Render " +
-    "to only deploy when you say 'ship it', not on every save.",
+    "Say 'help with shipping setup' to configure Vercel, Netlify, Railway, or Render " +
+    "to only go live when you say 'ship it', not on every save.",
   inputSchema: z.object({
     platform: z
       .enum(["vercel", "netlify", "railway", "render", "other"])
       .optional()
-      .describe("Your deploy platform. Auto-detected from project files if not specified."),
+      .describe("Your shipping platform. Auto-detected from project files if not specified."),
     repo_path: z
       .string()
       .optional()
-      .describe("Absolute path to the project. Auto-set in Claude Code; ask the user in Claude Desktop."),
+      .describe("Absolute path to the project. Use the current workspace folder path. Only ask the user if the path cannot be determined from context."),
   }),
 };
 
@@ -40,13 +40,13 @@ export async function deployPlatformHelp(args: z.infer<typeof deployPlatformHelp
     ghActionsNote =
       `\n\nGITHUB ACTIONS — AUTO-FIXED\n` +
       `I updated ${ghActionsResult.fixed.length} workflow file${ghActionsResult.fixed.length === 1 ? "" : "s"} ` +
-      `to only deploy when you ship:\n` +
+      `to only go live when you ship:\n` +
       ghActionsResult.fixed.map((f) => `  ✓ ${f}`).join("\n") +
       `\nSave and ship these changes to apply the fix.`;
   } else if (ghActionsResult.detected.length > 0) {
     ghActionsNote =
       `\n\nGITHUB ACTIONS WARNING\n` +
-      `${ghActionsResult.detected.length} workflow file${ghActionsResult.detected.length === 1 ? "" : "s"} may deploy on every save:\n` +
+      `${ghActionsResult.detected.length} workflow file${ghActionsResult.detected.length === 1 ? "" : "s"} may go live on every save:\n` +
       ghActionsResult.detected.map((f) => `  ⚠ ${f}`).join("\n") +
       `\nOpen each file in GitHub (github.com → your repo → .github/workflows) ` +
       `and change 'on: push' to only run on the '${liveBranch}' branch.`;
@@ -151,24 +151,24 @@ function fixBroadGithubActions(repoPath: string, liveBranch: string): ActionsRes
 function vercelHelp(liveBranch: string): string {
   return (
     `VERCEL SETUP\n\n` +
-    `Good news — Vercel protects you by default. It only deploys from '${liveBranch}', ` +
+    `Good news — Vercel protects you by default. It only goes live from '${liveBranch}', ` +
     `so saving your work won't touch your live app.\n\n` +
     `To double-check:\n` +
     `  1. Go to vercel.com → your project\n` +
-    `  2. Click Settings → Git\n` +
-    `  3. Make sure 'Production Branch' shows '${liveBranch}'\n\n` +
-    `Preview deployments on versie-dev are fine — those are private previews only.`
+    `  2. Click Settings → Environments\n` +
+    `  3. Under Production, make sure the branch is set to '${liveBranch}'\n\n` +
+    `Preview builds on versie-dev are fine — those are private previews only.`
   );
 }
 
 function netlifyHelp(liveBranch: string): string {
   return (
     `NETLIFY SETUP\n\n` +
-    `To protect your live app, tell Netlify to only deploy from '${liveBranch}':\n\n` +
+    `To protect your live app, tell Netlify to only go live from '${liveBranch}':\n\n` +
     `  1. Go to netlify.com → your app\n` +
-    `  2. Click Site configuration → Build & deploy → Branches and deploy contexts\n` +
-    `  3. Under 'Branch deploys', choose 'Deploy only the production branch'\n` +
-    `  4. Make sure production branch is set to '${liveBranch}'\n\n` +
+    `  2. Click Project configuration → Build & deploy → Continuous Deployment → Branches and deploy contexts → Configure\n` +
+    `  3. Make sure production branch is set to '${liveBranch}'\n` +
+    `  4. Under Branch deploys, choose 'Deploy only the production branch'\n\n` +
     `After this, saving your work won't update your live app — only 'ship it' will.`
   );
 }
@@ -178,28 +178,29 @@ function railwayHelp(liveBranch: string): string {
     `RAILWAY SETUP\n\n` +
     `To protect your live app, point Railway to '${liveBranch}' only:\n\n` +
     `  1. Go to railway.app → your project\n` +
-    `  2. Click your service → Settings → Source\n` +
-    `  3. Set 'Branch' to '${liveBranch}'\n\n` +
-    `After this, saving your work won't redeploy your app — only 'ship it' will.`
+    `  2. Click your service → Settings\n` +
+    `  3. Under the GitHub integration section, set the trigger branch to '${liveBranch}'\n\n` +
+    `After this, saving your work won't update your live app — only 'ship it' will.`
   );
 }
 
 function renderHelp(liveBranch: string): string {
   return (
     `RENDER SETUP\n\n` +
-    `To protect your live service, point Render to '${liveBranch}' only:\n\n` +
+    `To protect your live service, make sure Render is pointed to '${liveBranch}' only:\n\n` +
     `  1. Go to render.com → your service\n` +
     `  2. Click Settings → Build & Deploy\n` +
-    `  3. Set 'Auto-Deploy' branch to '${liveBranch}'\n\n` +
-    `After this, saving your work won't redeploy your service — only 'ship it' will.`
+    `  3. Check that the connected branch is '${liveBranch}' (set when the service was created)\n` +
+    `  4. Make sure Auto-Deploy is enabled so 'ship it' triggers a live update\n\n` +
+    `After this, saving your work won't update your live service — only 'ship it' will.`
   );
 }
 
 function genericHelp(liveBranch: string): string {
   return (
-    `DEPLOY SETUP\n\n` +
+    `SHIPPING SETUP\n\n` +
     `To make sure your live app only updates when you say 'ship it':\n\n` +
-    `Find your deploy platform's branch settings and point it to '${liveBranch}' only.\n` +
+    `Find your shipping platform's branch settings and point it to '${liveBranch}' only.\n` +
     `That way:\n` +
     `  - Saving your work stays private (goes to versie-dev)\n` +
     `  - 'Ship it' updates your live app (merges to ${liveBranch})\n\n` +

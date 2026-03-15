@@ -9,7 +9,7 @@ export const listCommandsSchema = {
     repo_path: z
       .string()
       .optional()
-      .describe("Absolute path to the project. Auto-set in Claude Code; ask the user in Claude Desktop."),
+      .describe("Absolute path to the project. Use the current workspace folder path. Only ask the user if the path cannot be determined from context."),
   }),
 };
 
@@ -51,7 +51,7 @@ export async function listCommands(args: z.infer<typeof listCommandsSchema.input
     `**Diagnostics**\n` +
     `- \`check my project health\` — Full status report\n` +
     `- \`fix this error: [message]\` — Diagnose and fix a Git error\n` +
-    `- \`help with my deploy\` — Configure Vercel/Netlify/Railway to only go live when you ship\n\n` +
+    `- \`help with shipping setup\` — Configure Vercel/Netlify/Railway to only go live when you ship\n\n` +
     `support@versie.co`
   );
 }

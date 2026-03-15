@@ -95,9 +95,39 @@ export async function findCheckpoint(
   repoPath: string,
   query: string
 ): Promise<string | null> {
-  const checkpoints = await listCheckpoints(repoPath);
+  // Fetch tag name + annotation message together so we can search both
+  const result = await git(
+    ["tag", "-l", `${CHECKPOINT_PREFIX}/*`, "--sort=-creatordate", "--format=%(refname:short)|%(subject)"],
+    repoPath
+  );
+
+  const entries = result.stdout
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => {
+      const pipeIdx = line.indexOf("|");
+      return {
+        tag: line.slice(0, pipeIdx).trim(),
+        subject: line.slice(pipeIdx + 1).trim(),
+      };
+    });
+
+  if (entries.length === 0) return null;
+
+  // Normalize query: strip noise words users append ("checkpoint", "restore"),
+  // then convert spaces to hyphens to match sanitized tag slugs.
   const lower = query.toLowerCase();
-  return checkpoints.find((t) => t.toLowerCase().includes(lower)) ?? null;
+  const stripped = lower.replace(/\bcheckpoint\b/g, "").trim();
+  const normalized = stripped.replace(/\s+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+
+  // Try matches in order of specificity
+  const found =
+    entries.find((e) => e.tag.toLowerCase().includes(lower)) ??           // exact slug match
+    entries.find((e) => e.subject.toLowerCase().includes(lower)) ??       // annotation contains full query
+    entries.find((e) => normalized && e.tag.toLowerCase().includes(normalized)) ??    // slug with spaces→hyphens
+    entries.find((e) => stripped && e.subject.toLowerCase().includes(stripped));      // annotation stripped
+
+  return found?.tag ?? null;
 }
 
 /** Find a release tag by partial match (e.g. "v2" or "release") */

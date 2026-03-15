@@ -6,7 +6,7 @@ import { createAutoSnapshot, findCheckpoint } from "../snapshots/manager.js";
 export const goBackToSchema = {
   description:
     "Say 'go back to [checkpoint name or time]' to restore an earlier version. " +
-    "Say 'go back to live' to reset to what's currently deployed.",
+    "Say 'go back to live' to reset to what's currently live.",
   inputSchema: z.object({
     target: z
       .string()
@@ -17,7 +17,7 @@ export const goBackToSchema = {
     repo_path: z
       .string()
       .optional()
-      .describe("Absolute path to the project. Auto-set in Claude Code; ask the user in Claude Desktop."),
+      .describe("Absolute path to the project. Use the current workspace folder path. Only ask the user if the path cannot be determined from context."),
   }),
 };
 

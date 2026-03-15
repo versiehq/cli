@@ -26,7 +26,7 @@ function buildVersieEntry(): { command: string; args: string[] } {
   // Fall back to bare "npx" only if the sibling binary doesn't exist
   // (e.g. unusual global install layouts).
   const command = existsSync(npxPath) ? npxPath : "npx";
-  return { command, args: ["-y", "versie"] };
+  return { command, args: ["-y", "versie-mcp"] };
 }
 
 function getToolConfigs(): ToolConfig[] {
@@ -133,6 +133,23 @@ function installIntoConfig(tool: ToolConfig): InstallResult {
   return "installed";
 }
 
+function installGlobalCursorRules(): void {
+  const home = homedir();
+  const cursorRulesDir = join(home, ".cursor", "rules");
+  const cursorRulesPath = join(cursorRulesDir, "versie.mdc");
+  const content = `---
+description: Versie MCP tools are available for version control
+globs:
+alwaysApply: true
+---
+When the user asks to save, ship, check health, view timeline, or do any version control operation, use the Versie MCP tools.
+Always determine the current workspace/project folder path from context and pass it as repo_path. Never ask the user for the path.
+`;
+  if (existsSync(cursorRulesPath) && readFileSync(cursorRulesPath, "utf-8") === content) return;
+  mkdirSync(cursorRulesDir, { recursive: true });
+  writeFileSync(cursorRulesPath, content, "utf-8");
+}
+
 export function runInstaller(): void {
   const tools = getToolConfigs();
   const installed: string[] = [];
@@ -148,13 +165,18 @@ export function runInstaller(): void {
     else errors.push(tool.name);
   }
 
+  // Write global Cursor rules so Cursor's AI knows to use Versie tools
+  // and auto-detect the workspace path without asking the user
+  const cursorDetected = installed.includes("Cursor") || alreadyInstalled.includes("Cursor");
+  if (cursorDetected) installGlobalCursorRules();
+
   const anyFound = installed.length > 0 || alreadyInstalled.length > 0 || errors.length > 0;
 
   if (!anyFound) {
     console.log("No supported AI tools found.\n");
     const entry = buildVersieEntry();
     console.log(
-      `Add Versie manually by putting this in your tool's MCP config:\n  "versie": { "command": "${entry.command}", "args": ["-y", "versie"] }\n`
+      `Add Versie manually by putting this in your tool's MCP config:\n  "versie": { "command": "${entry.command}", "args": ["-y", "versie-mcp"] }\n`
     );
     console.log(
       "Supported tools: Claude Desktop, Cursor, Windsurf, Claude Code\nNeed help? support@versie.co"

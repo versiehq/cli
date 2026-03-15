@@ -11,6 +11,10 @@ import { logger } from "../utils/logger.js";
  * continues its normal flow.
  */
 export async function checkFirstRun(repoPath: string): Promise<string | null> {
+  // Guard: never attempt setup or write rules files outside a git repo
+  const gitCheck = await git(["rev-parse", "--git-dir"], repoPath);
+  if (gitCheck.exitCode !== 0) return null;
+
   if (readConfig(repoPath) !== null) {
     ensureCursorRules(repoPath); // backfill for projects initialized before this feature
     return null;
@@ -26,6 +30,8 @@ const DEV_BRANCH = "versie-dev";
 
 /** Write .cursor/rules/versie.mdc so Cursor's AI auto-discovers Versie tools and knows the project path. */
 function ensureCursorRules(repoPath: string): void {
+  // Never write outside a real project directory
+  if (!existsSync(join(repoPath, ".git"))) return;
   const cursorRulesDir = join(repoPath, ".cursor", "rules");
   const cursorRulesPath = join(cursorRulesDir, "versie.mdc");
   const content = `---
@@ -34,7 +40,7 @@ globs:
 alwaysApply: true
 ---
 Use the Versie MCP tools for all save, deploy, and version control operations in this project.
-Always pass repo_path="${repoPath}" when calling any Versie MCP tool.
+Always pass repo_path="${repoPath}" when calling any Versie MCP tool. Never ask the user for the project path.
 Say "save my work" to save, "ship it" to deploy, "list commands" to see all options.
 `;
   // Write if missing or if the hardcoded path has changed (e.g. project moved)

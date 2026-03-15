@@ -8,13 +8,13 @@ export const whatsChangedSchema = {
     "Ask 'since last save' for uncommitted changes, or 'since last ship' for what's saved but not live yet.",
   inputSchema: z.object({
     since: z
-      .enum(["last save", "last deploy"])
+      .enum(["last save", "last ship"])
       .optional()
-      .describe("'last save' for uncommitted changes, 'last deploy' for what's not live yet."),
+      .describe("'last save' for uncommitted changes, 'last ship' for what's not live yet."),
     repo_path: z
       .string()
       .optional()
-      .describe("Absolute path to the project. Auto-set in Claude Code; ask the user in Claude Desktop."),
+      .describe("Absolute path to the project. Use the current workspace folder path. Only ask the user if the path cannot be determined from context."),
   }),
 };
 
@@ -26,7 +26,7 @@ export async function whatsChanged(args: z.infer<typeof whatsChangedSchema.input
 
   const mode = args.since ?? "last save";
 
-  if (mode === "last deploy") {
+  if (mode === "last ship") {
     const gap = await getDeployGap(repoPath, config);
     const gitNote = config.showGitCommands ? `\n(git: log ${config.liveBranch}..${config.devBranch})` : "";
     if (gap.count === 0) {
@@ -51,9 +51,18 @@ export async function whatsChanged(args: z.infer<typeof whatsChangedSchema.input
     git(["diff", "--cached", "--stat"], repoPath),
   ]);
 
+  // git diff --stat misses untracked files — extract them from git status --porcelain
+  const untrackedFiles = statusResult.stdout
+    .split("\n")
+    .filter((line) => line.startsWith("?? "))
+    .map((line) => line.slice(3).trim());
+
   const parts: string[] = [];
   if (stagedResult.stdout.trim()) parts.push(stagedResult.stdout.trim());
   if (diffResult.stdout.trim()) parts.push(diffResult.stdout.trim());
+  if (untrackedFiles.length > 0) {
+    parts.push(`New files:\n${untrackedFiles.map((f) => `  ${f}`).join("\n")}`);
+  }
 
   const summary = parts.join("\n") || statusResult.stdout;
   return `Changes since your last save:\n${summary}\n\nSay 'save my work' to save these.${gitNote}`;

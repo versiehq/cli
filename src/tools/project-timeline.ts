@@ -13,7 +13,7 @@ export const projectTimelineSchema = {
     repo_path: z
       .string()
       .optional()
-      .describe("Absolute path to the project. Auto-set in Claude Code; ask the user in Claude Desktop."),
+      .describe("Absolute path to the project. Use the current workspace folder path. Only ask the user if the path cannot be determined from context."),
   }),
 };
 
@@ -60,7 +60,12 @@ export async function projectTimeline(args: z.infer<typeof projectTimelineSchema
 
   entries.sort((a, b) => b.ts - a.ts);
 
-  const lines = ["YOUR TIMELINE", "─────────────"];
+  const lines = [
+    "YOUR TIMELINE",
+    "─────────────",
+    "○ saved to work  ★ checkpoint (work)  ● shipped live",
+    "",
+  ];
   for (const entry of entries.slice(0, 25)) {
     lines.push(entry.display);
   }

@@ -1,10 +1,10 @@
 {
-  "name": "versie",
+  "name": "versie-mcp",
   "version": "1.0.0",
   "description": "Git made invisible for vibe coders — MCP server",
   "type": "module",
   "bin": {
-    "versie": "./build/index.js"
+    "versie-mcp": "./build/index.js"
   },
   "scripts": {
     "build": "tsc && chmod 755 build/index.js",

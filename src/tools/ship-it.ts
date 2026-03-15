@@ -7,12 +7,12 @@ import { saveMyWork } from "./save-my-work.js";
 
 export const shipItSchema = {
   description:
-    "Say 'ship it' to deploy saved work live. Auto-saves first, then pushes everything to the live version.",
+    "Say 'ship it' to go live. Auto-saves first, then pushes everything to the live version.",
   inputSchema: z.object({
     repo_path: z
       .string()
       .optional()
-      .describe("Absolute path to the project. Auto-set in Claude Code; ask the user in Claude Desktop."),
+      .describe("Absolute path to the project. Use the current workspace folder path. Only ask the user if the path cannot be determined from context."),
   }),
 };
 
@@ -83,7 +83,7 @@ export async function shipIt(args: z.infer<typeof shipItSchema.inputSchema>): Pr
     if (failureMsg !== null) {
       return `Your work is saved, but it didn't go live.\n\n${failureMsg}\n\nOnce that's fixed, say 'ship it' again.`;
     }
-    throw new Error(`Deploy failed while pushing: ${pushResult.stderr}`);
+    throw new Error(`Shipping failed while pushing: ${pushResult.stderr}`);
   }
 
   // Step 6: Create release tag on live branch, then switch back to dev

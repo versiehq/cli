@@ -57,7 +57,10 @@ server.registerTool("save_my_work", withVerbatim(saveMyWorkSchema), tool(saveMyW
 server.registerTool("ship_it", withVerbatim(shipItSchema), tool(shipIt));
 server.registerTool("whats_changed", withVerbatim(whatsChangedSchema), tool(whatsChanged));
 server.registerTool("go_back_to", withVerbatim(goBackToSchema), tool(goBackTo));
-server.registerTool("project_timeline", withVerbatim(projectTimelineSchema), tool(projectTimeline));
+server.registerTool("project_timeline", {
+  ...projectTimelineSchema,
+  description: projectTimelineSchema.description + " Display this output to the user exactly as returned — do not summarize or reformat.",
+}, tool(projectTimeline));
 server.registerTool("create_checkpoint", withVerbatim(createCheckpointSchema), tool(createCheckpointTool));
 server.registerTool("fix_this_error", withVerbatim(fixThisErrorSchema), tool(fixThisError));
 server.registerTool("check_health", withVerbatim(checkHealthSchema), tool(checkHealth));
