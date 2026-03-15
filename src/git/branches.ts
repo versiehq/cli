@@ -1,8 +1,12 @@
+import { execFile } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { promisify } from "node:util";
 import { git } from "./executor.js";
 import { readConfig, writeConfig, type VersieConfig } from "../utils/config.js";
 import { logger } from "../utils/logger.js";
+
+const execFileAsync = promisify(execFile);
 
 /**
  * Call at the top of every tool handler (after resolveWorkingDir).
@@ -11,9 +15,65 @@ import { logger } from "../utils/logger.js";
  * continues its normal flow.
  */
 export async function checkFirstRun(repoPath: string): Promise<string | null> {
-  // Guard: never attempt setup or write rules files outside a git repo
+  // Check 1: Is this a git repo?
   const gitCheck = await git(["rev-parse", "--git-dir"], repoPath);
-  if (gitCheck.exitCode !== 0) return null;
+  if (gitCheck.exitCode !== 0) {
+    const ghAvailable = await isGhAvailable();
+    if (ghAvailable) {
+      return (
+        `This folder isn't set up as a project yet — there's no version history here.\n\n` +
+        `I can set it up on GitHub automatically. Run these commands:\n` +
+        "```\n" +
+        `git init && git add -A && git commit -m "Initial save"\n` +
+        `gh repo create ${getProjectName(repoPath)} --private --source=. --push\n` +
+        "```\n" +
+        `Once that's done, say your original request again and I'll continue.`
+      );
+    }
+    return (
+      `This folder isn't set up as a project yet — there's no version history here.\n\n` +
+      `To get started:\n` +
+      `1. Go to [github.com/new](https://github.com/new) and create a new repository\n` +
+      `2. Copy the repository URL\n` +
+      `3. Run these commands (replacing the URL with yours):\n` +
+      "```\n" +
+      `git init\n` +
+      `git add -A\n` +
+      `git commit -m "Initial save"\n` +
+      `git remote add origin https://github.com/yourname/your-project.git\n` +
+      `git push -u origin main\n` +
+      "```\n" +
+      `Once that's done, say your original request again and I'll continue.`
+    );
+  }
+
+  // Check 2: Is there a remote?
+  const remoteCheck = await git(["remote"], repoPath);
+  if (remoteCheck.exitCode === 0 && !remoteCheck.stdout.trim()) {
+    const ghAvailable = await isGhAvailable();
+    if (ghAvailable) {
+      return (
+        `This project has local history but isn't connected to GitHub yet.\n\n` +
+        `I can connect it automatically. Run:\n` +
+        "```\n" +
+        `gh repo create ${getProjectName(repoPath)} --private --source=. --push\n` +
+        "```\n" +
+        `Once that's done, say your original request again and I'll continue.`
+      );
+    }
+    return (
+      `This project has local history but isn't connected to GitHub yet.\n\n` +
+      `To connect it:\n` +
+      `1. Go to [github.com/new](https://github.com/new) and create a new empty repository (no README or .gitignore)\n` +
+      `2. Copy the repository URL\n` +
+      `3. Run these commands (replacing the URL with yours):\n` +
+      "```\n" +
+      `git remote add origin https://github.com/yourname/your-project.git\n` +
+      `git push -u origin HEAD\n` +
+      "```\n" +
+      `Once that's done, say your original request again and I'll continue.`
+    );
+  }
 
   if (readConfig(repoPath) !== null) {
     ensureCursorRules(repoPath); // backfill for projects initialized before this feature
@@ -24,6 +84,19 @@ export async function checkFirstRun(repoPath: string): Promise<string | null> {
     `Versie is set up! Your work saves safely here — your live app only changes when you say "ship it".\n` +
     `Say **"save my work"** to save, **"ship it"** to go live, or **"list commands"** to see all options.`
   );
+}
+
+async function isGhAvailable(): Promise<boolean> {
+  try {
+    await execFileAsync("gh", ["auth", "status"], { timeout: 5_000, env: process.env });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function getProjectName(repoPath: string): string {
+  return repoPath.split("/").filter(Boolean).pop() ?? "my-project";
 }
 
 const DEV_BRANCH = "versie-dev";
