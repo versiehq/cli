@@ -29,10 +29,10 @@ const REPO = "/fake/repo";
 beforeEach(() => vi.clearAllMocks());
 
 describe("createAutoSnapshot", () => {
-  it("creates a snapshot tag with versie/snapshot/ prefix", async () => {
+  it("creates a snapshot tag with snapshot/ prefix", async () => {
     mockGit.mockResolvedValue(ok());
     const tag = await createAutoSnapshot(REPO);
-    expect(tag).toMatch(/^versie\/snapshot\//);
+    expect(tag).toMatch(/^snapshot\//);
     expect(mockGit).toHaveBeenCalledWith(
       expect.arrayContaining(["tag", "-a", tag, "-m", expect.any(String)]),
       REPO
@@ -48,27 +48,27 @@ describe("createReleaseTag", () => {
       .mockResolvedValueOnce(ok()); // push
 
     const tag = await createReleaseTag(REPO);
-    expect(tag).toBe("versie/release/v1");
+    expect(tag).toBe("v1");
   });
 
   it("increments correctly from existing tags", async () => {
     mockGit
-      .mockResolvedValueOnce(ok("versie/release/v3\nversie/release/v2\nversie/release/v1"))
+      .mockResolvedValueOnce(ok("v3\nv2\nv1"))
       .mockResolvedValueOnce(ok())
       .mockResolvedValueOnce(ok());
 
     const tag = await createReleaseTag(REPO);
-    expect(tag).toBe("versie/release/v4");
+    expect(tag).toBe("v4");
   });
 
   it("handles non-sequential tags by finding the true max", async () => {
     mockGit
-      .mockResolvedValueOnce(ok("versie/release/v10\nversie/release/v2"))
+      .mockResolvedValueOnce(ok("v10\nv2"))
       .mockResolvedValueOnce(ok())
       .mockResolvedValueOnce(ok());
 
     const tag = await createReleaseTag(REPO);
-    expect(tag).toBe("versie/release/v11");
+    expect(tag).toBe("v11");
   });
 });
 
@@ -80,27 +80,27 @@ describe("listCheckpoints", () => {
 
   it("returns checkpoint tags sorted by creation date", async () => {
     mockGit.mockResolvedValue(
-      ok("versie/checkpoint/beta\nversie/checkpoint/alpha\nversie/checkpoint/mvp")
+      ok("checkpoint/beta\ncheckpoint/alpha\ncheckpoint/mvp")
     );
     const result = await listCheckpoints(REPO);
-    expect(result).toEqual(["versie/checkpoint/beta", "versie/checkpoint/alpha", "versie/checkpoint/mvp"]);
+    expect(result).toEqual(["checkpoint/beta", "checkpoint/alpha", "checkpoint/mvp"]);
   });
 });
 
 describe("findCheckpoint", () => {
   it("returns null when no checkpoints match", async () => {
-    mockGit.mockResolvedValue(ok("versie/checkpoint/alpha\nversie/checkpoint/beta"));
+    mockGit.mockResolvedValue(ok("checkpoint/alpha|alpha\ncheckpoint/beta|beta"));
     expect(await findCheckpoint(REPO, "gamma")).toBeNull();
   });
 
   it("finds checkpoint by partial name match", async () => {
-    mockGit.mockResolvedValue(ok("versie/checkpoint/my-mvp\nversie/checkpoint/beta"));
-    expect(await findCheckpoint(REPO, "mvp")).toBe("versie/checkpoint/my-mvp");
+    mockGit.mockResolvedValue(ok("checkpoint/my-mvp|my mvp\ncheckpoint/beta|beta"));
+    expect(await findCheckpoint(REPO, "mvp")).toBe("checkpoint/my-mvp");
   });
 
   it("match is case-insensitive", async () => {
-    mockGit.mockResolvedValue(ok("versie/checkpoint/MyFeature"));
-    expect(await findCheckpoint(REPO, "myfeature")).toBe("versie/checkpoint/MyFeature");
+    mockGit.mockResolvedValue(ok("checkpoint/MyFeature|MyFeature"));
+    expect(await findCheckpoint(REPO, "myfeature")).toBe("checkpoint/MyFeature");
   });
 });
 
@@ -108,20 +108,20 @@ describe("createCheckpoint", () => {
   it("creates a checkpoint and returns atLimit=false when below limit", async () => {
     // listCheckpoints returns 3 existing
     mockGit
-      .mockResolvedValueOnce(ok("versie/checkpoint/a\nversie/checkpoint/b\nversie/checkpoint/c"))
+      .mockResolvedValueOnce(ok("checkpoint/a\ncheckpoint/b\ncheckpoint/c"))
       .mockResolvedValueOnce(ok()) // tag -a
       .mockResolvedValueOnce(ok()); // push
 
     const result = await createCheckpoint(REPO, "my feature");
     expect(result.atLimit).toBe(false);
-    expect(result.tagName).toBe("versie/checkpoint/my-feature");
+    expect(result.tagName).toBe("checkpoint/my-feature");
   });
 
   it("returns atLimit=true when at the 5-checkpoint limit", async () => {
     mockGit.mockResolvedValueOnce(
       ok(
-        "versie/checkpoint/a\nversie/checkpoint/b\nversie/checkpoint/c\n" +
-          "versie/checkpoint/d\nversie/checkpoint/e"
+        "checkpoint/a\ncheckpoint/b\ncheckpoint/c\n" +
+          "checkpoint/d\ncheckpoint/e"
       )
     );
 
@@ -139,21 +139,21 @@ describe("createCheckpoint", () => {
       .mockResolvedValueOnce(ok()); // push
 
     const result = await createCheckpoint(REPO, "My Feature! v2.0");
-    expect(result.tagName).toBe("versie/checkpoint/my-feature--v2-0");
+    expect(result.tagName).toBe("checkpoint/my-feature--v2-0");
   });
 
   it("returns atLimit=true when creating the fifth checkpoint (at limit after create)", async () => {
     // 4 existing → after this one = 5 = at limit
     mockGit
       .mockResolvedValueOnce(
-        ok("versie/checkpoint/a\nversie/checkpoint/b\nversie/checkpoint/c\nversie/checkpoint/d")
+        ok("checkpoint/a\ncheckpoint/b\ncheckpoint/c\ncheckpoint/d")
       )
       .mockResolvedValueOnce(ok())
       .mockResolvedValueOnce(ok());
 
     const result = await createCheckpoint(REPO, "fifth");
     expect(result.atLimit).toBe(true);
-    expect(result.tagName).toBe("versie/checkpoint/fifth");
+    expect(result.tagName).toBe("checkpoint/fifth");
   });
 
   it("throws when git tag command fails", async () => {

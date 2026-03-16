@@ -1,6 +1,15 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
-import { dirname, join } from "path";
+import { dirname, join, resolve, sep } from "path";
 import { homedir } from "os";
+
+/** Validate that a resolved path stays within the user's home directory. Falls back to home if not. */
+function safeEnvPath(envValue: string | undefined, fallback: string): string {
+  if (!envValue) return fallback;
+  const resolved = resolve(envValue);
+  const home = resolve(homedir());
+  if (resolved.startsWith(home + sep) || resolved === home) return resolved;
+  return fallback;
+}
 
 type InstallResult = "installed" | "already_installed" | "not_found" | "error";
 
@@ -44,7 +53,7 @@ function getToolConfigs(): ToolConfig[] {
       detectionPath: dir,
     });
   } else if (platform === "win32") {
-    const appdata = process.env["APPDATA"] ?? join(home, "AppData", "Roaming");
+    const appdata = safeEnvPath(process.env["APPDATA"], join(home, "AppData", "Roaming"));
     const dir = join(appdata, "Claude");
     configs.push({
       name: "Claude Desktop",
@@ -70,7 +79,7 @@ function getToolConfigs(): ToolConfig[] {
 
   // Windsurf
   if (platform === "win32") {
-    const userprofile = process.env["USERPROFILE"] ?? home;
+    const userprofile = safeEnvPath(process.env["USERPROFILE"], home);
     const windsurfDir = join(userprofile, ".codeium", "windsurf");
     configs.push({
       name: "Windsurf",

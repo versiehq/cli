@@ -157,8 +157,8 @@ describe("checkHealth", () => {
 
   it("reports checkpoint count", async () => {
     mockListCheckpoints.mockResolvedValue([
-      "versie/checkpoint/alpha",
-      "versie/checkpoint/beta",
+      "checkpoint/alpha",
+      "checkpoint/beta",
     ]);
     const result = await checkHealth({ repo_path: REPO });
     expect(result).toMatch(/2 checkpoints/i);

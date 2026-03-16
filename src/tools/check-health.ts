@@ -9,8 +9,13 @@ export const checkHealthSchema = {
   description:
     "Say 'setup versie', 'check health', 'project health', 'get started', or 'check my project' to initialize or check project status. " +
     "Say 'turn on/off verbose mode' to toggle detailed output. " +
-    "Say 'show git commands' or 'hide git commands' to toggle showing the underlying git operations.",
+    "Say 'show git commands' or 'hide git commands' to toggle showing the underlying git operations. " +
+    "If the user provides a GitHub SSH URL (e.g. 'set up versie with git@github.com:you/repo.git'), pass it as github_url.",
   inputSchema: z.object({
+    github_url: z
+      .string()
+      .optional()
+      .describe("GitHub SSH URL provided by the user (e.g. git@github.com:you/repo.git). Only set when the user explicitly gives a URL to connect their project to GitHub."),
     verbose: z
       .enum(["on", "off"])
       .optional()
@@ -28,8 +33,22 @@ export const checkHealthSchema = {
 
 export async function checkHealth(args: z.infer<typeof checkHealthSchema.inputSchema>): Promise<string> {
   const repoPath = await resolveWorkingDir(args.repo_path);
-  const welcome = await checkFirstRun(repoPath);
-  if (welcome) return welcome;
+  const welcome = await checkFirstRun(repoPath, args.github_url);
+  if (welcome) {
+    // If Versie was just initialized (config now exists), also check deploy platform
+    const config = readConfig(repoPath);
+    if (config) {
+      const deployWarning = await checkDeployConfig(repoPath, config.liveBranch);
+      if (deployWarning) {
+        return (
+          welcome +
+          `\n\n⚠️ **One more thing:** ${deployWarning}\n` +
+          `Say **"help with shipping setup"** and I'll walk you through fixing it.`
+        );
+      }
+    }
+    return welcome;
+  }
 
   // Verbose mode toggle
   if (args.verbose !== undefined) {

@@ -16,6 +16,7 @@ vi.mock("../../git/branches.js", () => ({
 vi.mock("../../git/safety.js", () => ({
   checkNoWorktrees: vi.fn(),
   classifyPushFailure: vi.fn(),
+  checkDeployConfig: vi.fn(),
 }));
 
 vi.mock("../../snapshots/manager.js", () => ({
@@ -34,7 +35,7 @@ vi.mock("../../utils/config.js", () => ({
 
 import { git } from "../../git/executor.js";
 import { checkFirstRun, ensureInitialized, getDeployGap, resolveWorkingDir } from "../../git/branches.js";
-import { checkNoWorktrees, classifyPushFailure } from "../../git/safety.js";
+import { checkNoWorktrees, classifyPushFailure, checkDeployConfig } from "../../git/safety.js";
 import { createReleaseTag } from "../../snapshots/manager.js";
 import { saveMyWork } from "../../tools/save-my-work.js";
 import { shipIt } from "../../tools/ship-it.js";
@@ -46,6 +47,7 @@ const mockResolveWorkingDir = vi.mocked(resolveWorkingDir);
 const mockCheckFirstRun = vi.mocked(checkFirstRun);
 const mockCheckNoWorktrees = vi.mocked(checkNoWorktrees);
 const mockClassifyPushFailure = vi.mocked(classifyPushFailure);
+const mockCheckDeployConfig = vi.mocked(checkDeployConfig);
 const mockCreateReleaseTag = vi.mocked(createReleaseTag);
 const mockSaveMyWork = vi.mocked(saveMyWork);
 
@@ -65,9 +67,10 @@ beforeEach(() => {
   mockCheckFirstRun.mockResolvedValue(null);
   mockEnsureInitialized.mockResolvedValue(CONFIG);
   mockCheckNoWorktrees.mockResolvedValue({ ok: true });
-  mockCreateReleaseTag.mockResolvedValue("versie/release/v1");
+  mockCreateReleaseTag.mockResolvedValue("v1");
   mockSaveMyWork.mockResolvedValue("Saved!");
   mockClassifyPushFailure.mockResolvedValue(null); // default: unrecognized failure → throw
+  mockCheckDeployConfig.mockResolvedValue(null); // default: no deploy config issues
 });
 
 describe("shipIt", () => {
@@ -173,7 +176,7 @@ describe("shipIt", () => {
     expect(result).toMatch(/2 changes/i);
     expect(result).toMatch(/Added payment form/);
     expect(result).toMatch(/Fixed header/);
-    expect(result).toMatch(/versie\/release\/v1/);
+    expect(result).toMatch(/\bv1\b/);
   });
 
   it("returns to versie-dev after successful deploy", async () => {
@@ -205,7 +208,7 @@ describe("shipIt", () => {
     mockGetDeployGap.mockResolvedValue({ count: 1, summaries: [] });
     mockClassifyPushFailure.mockResolvedValue(null);
 
-    await expect(shipIt({ repo_path: REPO })).rejects.toThrow(/Deploy failed/i);
+    await expect(shipIt({ repo_path: REPO })).rejects.toThrow(/Shipping failed/i);
 
     const lastCall = mockGit.mock.calls.at(-1)?.[0];
     expect(lastCall).toEqual(["checkout", "versie-dev"]);

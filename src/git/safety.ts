@@ -12,7 +12,7 @@ export async function checkIsRepo(repoPath: string): Promise<SafetyCheck> {
   if (result.exitCode !== 0) {
     return {
       ok: false,
-      message: "This folder isn't set up as a project yet. Run: git init",
+      message: "This folder isn't set up as a project yet. Say 'versie setup' to get started.",
     };
   }
   return { ok: true };
@@ -49,8 +49,8 @@ export async function checkNoWorktrees(repoPath: string): Promise<SafetyCheck> {
     return {
       ok: false,
       message:
-        "You have an active worktree session open. Changes made in a worktree " +
-        "can bypass Versie's protection if merged directly to your live branch. " +
+        "You have an active worktree session open. Changes made there " +
+        "can bypass Versie's protection if sent directly to your live branch. " +
         "Save and close the worktree before shipping.",
     };
   }

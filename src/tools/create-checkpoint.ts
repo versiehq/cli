@@ -38,7 +38,7 @@ export async function createCheckpointTool(args: z.infer<typeof createCheckpoint
   if (result.atLimit && !result.tagName) {
     // Already at limit before creating
     const existing = await listCheckpoints(repoPath);
-    const names = existing.map((t) => `  - ${t.replace("versie/checkpoint/", "")}`).join("\n");
+    const names = existing.map((t) => `  - ${t.replace("checkpoint/", "")}`).join("\n");
     return (
       `You've reached the 5-checkpoint limit. Your current checkpoints:\n${names}\n\n` +
       `Upgrade to Pro for unlimited checkpoints — versie.co.`
@@ -49,6 +49,6 @@ export async function createCheckpointTool(args: z.infer<typeof createCheckpoint
     ? "\n\nYou're now at the 5-checkpoint limit. Upgrade to Pro for unlimited checkpoints — versie.co."
     : "";
 
-  const gitNote = config.showGitCommands ? `\n(git: tag versie/checkpoint/${args.name})` : "";
+  const gitNote = config.showGitCommands ? `\n(git: tag checkpoint/${args.name})` : "";
   return `Checkpoint '${args.name}' saved — you can always return to this point.${limitNote}${gitNote}`;
 }

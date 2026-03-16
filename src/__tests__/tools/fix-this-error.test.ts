@@ -47,7 +47,7 @@ beforeEach(() => {
   mockResolveWorkingDir.mockResolvedValue(REPO);
   mockCheckFirstRun.mockResolvedValue(null);
   mockEnsureInitialized.mockResolvedValue(CONFIG);
-  mockCreateAutoSnapshot.mockResolvedValue("versie/snapshot/2024-01-01T00-00-00-000Z");
+  mockCreateAutoSnapshot.mockResolvedValue("snapshot/2024-01-01T00-00-00-000Z");
 });
 
 describe("fixThisError", () => {

@@ -24,46 +24,61 @@ export async function whatsChanged(args: z.infer<typeof whatsChangedSchema.input
   if (welcome) return welcome;
   const config = await ensureOnDev(repoPath);
 
-  const mode = args.since ?? "last save";
+  const mode = args.since;
 
-  if (mode === "last ship") {
-    const gap = await getDeployGap(repoPath, config);
-    const gitNote = config.showGitCommands ? `\n(git: log ${config.liveBranch}..${config.devBranch})` : "";
-    if (gap.count === 0) {
-      return `Everything you've saved is already live — nothing new to ship.${gitNote}`;
+  // Helper: build the "since last save" section
+  async function unsavedSection(): Promise<string> {
+    const statusResult = await git(["status", "--porcelain"], repoPath);
+    const gitNote = config.showGitCommands ? `\n(git: status)` : "";
+    if (!statusResult.stdout.trim()) {
+      return `**Since your last save:** Everything is saved — no new changes.${gitNote}`;
     }
-    const lines = gap.summaries.map((s) => `  - ${s}`).join("\n");
+    // Parse porcelain output into plain-language categories (no raw git diff jargon)
+    const updated: string[] = [], added: string[] = [], removed: string[] = [];
+    for (const line of statusResult.stdout.split("\n").filter(Boolean)) {
+      const xy = line.slice(0, 2).trim();
+      const file = line.slice(3).trim().split(" -> ").pop()!;
+      if (xy === "??" || xy === "A" || xy === "AM") added.push(file);
+      else if (xy === "D" || xy === "AD") removed.push(file);
+      else updated.push(file);
+    }
+    const parts: string[] = [];
+    if (updated.length > 0) parts.push(`Updated: ${updated.join(", ")}`);
+    if (added.length > 0) parts.push(`New files: ${added.join(", ")}`);
+    if (removed.length > 0) parts.push(`Removed: ${removed.join(", ")}`);
+    const total = updated.length + added.length + removed.length;
     return (
-      `Here's what you've saved since you last shipped:\n${lines}\n\n` +
-      `${gap.count} save${gap.count === 1 ? "" : "s"} ready to go live. Say 'ship it' when ready.${gitNote}`
+      `**Since your last save:** ${total} file${total === 1 ? "" : "s"} changed:\n` +
+      `${parts.join("\n")}\n\nSay 'save my work' to save these.${gitNote}`
     );
   }
 
-  // Default: uncommitted changes since last save
-  const statusResult = await git(["status", "--porcelain"], repoPath);
-  const gitNote = config.showGitCommands ? `\n(git: status)` : "";
-  if (!statusResult.stdout.trim()) {
-    return `No changes since your last save — everything is saved.${gitNote}`;
+  // Helper: build the "not yet live" section
+  async function notLiveSection(): Promise<string> {
+    const gap = await getDeployGap(repoPath, config);
+    const gitNote = config.showGitCommands ? `\n(git: log ${config.liveBranch}..${config.devBranch})` : "";
+    if (gap.count === 0) {
+      return `**Not yet live:** Everything you've saved is already live.${gitNote}`;
+    }
+    const lines = gap.summaries.map((s) => `  - ${s}`).join("\n");
+    return (
+      `**Not yet live** (${gap.count} save${gap.count === 1 ? "" : "s"}):\n${lines}\n\n` +
+      `Say 'ship it' when ready.${gitNote}`
+    );
   }
 
-  const [diffResult, stagedResult] = await Promise.all([
-    git(["diff", "--stat"], repoPath),
-    git(["diff", "--cached", "--stat"], repoPath),
-  ]);
-
-  // git diff --stat misses untracked files — extract them from git status --porcelain
-  const untrackedFiles = statusResult.stdout
-    .split("\n")
-    .filter((line) => line.startsWith("?? "))
-    .map((line) => line.slice(3).trim());
-
-  const parts: string[] = [];
-  if (stagedResult.stdout.trim()) parts.push(stagedResult.stdout.trim());
-  if (diffResult.stdout.trim()) parts.push(diffResult.stdout.trim());
-  if (untrackedFiles.length > 0) {
-    parts.push(`New files:\n${untrackedFiles.map((f) => `  ${f}`).join("\n")}`);
+  if (mode === "last save") {
+    // Strip the bold header when showing a single mode
+    const section = await unsavedSection();
+    return section.replace(/^\*\*Since your last save:\*\* /, "").replace(/^\*\*Since your last save:\*\*\n/, "");
   }
 
-  const summary = parts.join("\n") || statusResult.stdout;
-  return `Changes since your last save:\n${summary}\n\nSay 'save my work' to save these.${gitNote}`;
+  if (mode === "last ship") {
+    const section = await notLiveSection();
+    return section.replace(/^\*\*Not yet live:\*\* /, "").replace(/^\*\*Not yet live\*\*/, "Not yet live");
+  }
+
+  // Default (no mode specified): show both
+  const [unsaved, notLive] = await Promise.all([unsavedSection(), notLiveSection()]);
+  return `${unsaved}\n\n${notLive}`;
 }

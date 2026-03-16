@@ -1,7 +1,7 @@
 import { z } from "zod/v4";
 import { git } from "../git/executor.js";
 import { checkFirstRun, ensureInitialized, resolveWorkingDir } from "../git/branches.js";
-import { createAutoSnapshot, findCheckpoint } from "../snapshots/manager.js";
+import { createAutoSnapshot, findCheckpoint, findRelease } from "../snapshots/manager.js";
 
 export const goBackToSchema = {
   description:
@@ -68,7 +68,7 @@ export async function goBackTo(args: z.infer<typeof goBackToSchema.inputSchema>)
     await git(["reset", "--hard", checkpoint], repoPath);
     await git(["push", "--force-with-lease", "origin", config.devBranch], repoPath);
 
-    const name = checkpoint.replace("versie/checkpoint/", "");
+    const name = checkpoint.replace("checkpoint/", "");
     const gitNote = config.showGitCommands ? `\n(git: reset --hard ${checkpoint} · push --force-with-lease)` : "";
     return (
       `Restored to checkpoint '${name}'.\n` +
@@ -77,7 +77,22 @@ export async function goBackTo(args: z.infer<typeof goBackToSchema.inputSchema>)
     );
   }
 
-  // Case 3: Search commit history for matching message or date
+  // Case 3: Try to find a named release tag (e.g. "v2", "2", "last release")
+  const releaseTag = await findRelease(repoPath, target);
+  if (releaseTag) {
+    await git(["checkout", config.devBranch], repoPath);
+    await git(["reset", "--hard", releaseTag], repoPath);
+    await git(["push", "--force-with-lease", "origin", config.devBranch], repoPath);
+
+    const gitNote = config.showGitCommands ? `\n(git: reset --hard ${releaseTag} · push --force-with-lease)` : "";
+    return (
+      `Restored to ${releaseTag} — your workspace now matches that shipped version.\n` +
+      `Your live app wasn't affected — only your workspace was updated.\n` +
+      `Your previous work was saved as a snapshot in case you need it.${gitNote}`
+    );
+  }
+
+  // Case 4: Search commit history for matching message or date
   const logResult = await git(
     [
       "log",

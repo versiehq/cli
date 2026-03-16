@@ -1,9 +1,9 @@
 import { git, isSuccess } from "../git/executor.js";
+import { readConfig, writeConfig } from "../utils/config.js";
 import { logger } from "../utils/logger.js";
 
-const CHECKPOINT_PREFIX = "versie/checkpoint";
-const SNAPSHOT_PREFIX = "versie/snapshot";
-const RELEASE_PREFIX = "versie/release";
+const CHECKPOINT_PREFIX = "checkpoint";
+const SNAPSHOT_PREFIX = "snapshot";
 const FREE_CHECKPOINT_LIMIT = 5;
 
 /**
@@ -63,28 +63,39 @@ export async function listCheckpoints(repoPath: string): Promise<string[]> {
 
 /**
  * Create an auto-release tag after ship_it.
- * Tags go on the live branch after merge.
- * Returns the tag name (e.g. versie/release/v3).
+ * Tags as v1, v2, v3 — clean standard format, visible on GitHub releases.
+ * Determines next version by scanning ALL v* git tags (local + fetched remote)
+ * so numbering stays correct even if config is wiped or the repo had existing releases.
+ * Stores the tag name in config.releases so Versie can identify its own releases later.
  */
 export async function createReleaseTag(repoPath: string): Promise<string> {
-  const result = await git(
-    ["tag", "-l", `${RELEASE_PREFIX}/*`, "--sort=-creatordate"],
-    repoPath
-  );
-  const existing = result.stdout.split("\n").filter(Boolean);
+  // Scan all v[0-9]* tags to find the current highest version
+  const gitTagsResult = await git(["tag", "-l", "v[0-9]*"], repoPath);
+  const gitTags = gitTagsResult.stdout.split("\n").filter(Boolean);
 
-  // Find highest existing version number
   let maxNum = 0;
-  for (const tag of existing) {
-    const match = tag.match(/versie\/release\/v(\d+)/);
+  for (const tag of gitTags) {
+    const match = tag.match(/^v(\d+)/); // handles v1, v1.0.0, v1.2.3
+    if (match) maxNum = Math.max(maxNum, parseInt(match[1], 10));
+  }
+
+  // Also check config.releases in case local tags aren't fully fetched
+  const config = readConfig(repoPath);
+  for (const tag of config?.releases ?? []) {
+    const match = tag.match(/^v(\d+)$/);
     if (match) maxNum = Math.max(maxNum, parseInt(match[1], 10));
   }
 
   const nextNum = maxNum + 1;
-  const tagName = `${RELEASE_PREFIX}/v${nextNum}`;
+  const tagName = `v${nextNum}`;
 
   await git(["tag", "-a", tagName, "-m", `Release v${nextNum}`], repoPath);
   await git(["push", "origin", tagName], repoPath);
+
+  // Track in config so we can identify Versie-created releases in timeline / go-back-to
+  if (config) {
+    writeConfig(repoPath, { ...config, releases: [...(config.releases ?? []), tagName] });
+  }
 
   logger.info(`Release tag created: ${tagName}`);
   return tagName;
@@ -130,16 +141,25 @@ export async function findCheckpoint(
   return found?.tag ?? null;
 }
 
-/** Find a release tag by partial match (e.g. "v2" or "release") */
+/** Find a Versie-created release tag by partial match (e.g. "v2", "2", "last release") */
 export async function findRelease(
   repoPath: string,
   query: string
 ): Promise<string | null> {
-  const result = await git(
-    ["tag", "-l", `${RELEASE_PREFIX}/*`, "--sort=-creatordate"],
-    repoPath
+  const config = readConfig(repoPath);
+  const releases = config?.releases ?? [];
+  if (releases.length === 0) return null;
+
+  const lower = query.toLowerCase().trim();
+  // "last release" / "latest" → most recent (last in array)
+  if (/\b(last|latest|most recent)\b/.test(lower)) {
+    return releases[releases.length - 1] ?? null;
+  }
+  // Match by exact tag ("v2") or bare number ("2")
+  return (
+    releases.find((t) => t.toLowerCase() === lower) ??
+    releases.find((t) => t.toLowerCase() === `v${lower}`) ??
+    releases.find((t) => t.toLowerCase().includes(lower)) ??
+    null
   );
-  const tags = result.stdout.split("\n").filter(Boolean);
-  const lower = query.toLowerCase();
-  return tags.find((t) => t.toLowerCase().includes(lower)) ?? null;
 }

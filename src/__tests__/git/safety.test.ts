@@ -48,7 +48,7 @@ describe("checkIsRepo", () => {
     mockGit.mockResolvedValue(fail("fatal: not a git repository"));
     const result = await checkIsRepo(dir);
     expect(result.ok).toBe(false);
-    expect(result.message).toMatch(/git init/);
+    expect(result.message).toMatch(/versie setup/i);
   });
 });
 

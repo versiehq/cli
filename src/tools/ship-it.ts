@@ -1,7 +1,7 @@
 import { z } from "zod/v4";
 import { git } from "../git/executor.js";
 import { checkFirstRun, ensureInitialized, getDeployGap, resolveWorkingDir } from "../git/branches.js";
-import { checkNoWorktrees, classifyPushFailure } from "../git/safety.js";
+import { checkNoWorktrees, classifyPushFailure, checkDeployConfig } from "../git/safety.js";
 import { createAutoSnapshot, createReleaseTag } from "../snapshots/manager.js";
 import { saveMyWork } from "./save-my-work.js";
 
@@ -38,6 +38,16 @@ export async function shipIt(args: z.infer<typeof shipItSchema.inputSchema>): Pr
   const gap = await getDeployGap(repoPath, config);
   if (gap.count === 0) {
     return "Your live app is already up to date — nothing new to ship.";
+  }
+
+  // Step 2b: Pre-ship deploy platform check — warn before touching the live branch
+  const deployWarning = await checkDeployConfig(repoPath, config.liveBranch);
+  if (deployWarning) {
+    return (
+      `⚠ Hold on — ${deployWarning}\n\n` +
+      `Fix this in your platform settings first, then say "ship it" again. ` +
+      `Say "help with shipping setup" for step-by-step instructions.`
+    );
   }
 
   // Step 3: Switch to live branch and pull latest

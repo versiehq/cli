@@ -46,6 +46,7 @@ export const PATTERNS: ErrorPattern[] = [
     fix: [], // Manual resolution required
     snapshotFirst: true,
     requiresUserInput: true,
+    successMessage: "Once you've picked which lines to keep in each conflict, say 'save my work' to continue.",
   },
   {
     id: "detached-head",
@@ -103,6 +104,7 @@ export const PATTERNS: ErrorPattern[] = [
     fix: [], // SSH setup is outside git — requires browser + manual steps
     snapshotFirst: false,
     requiresUserInput: true,
+    successMessage: "Once your SSH key is added to GitHub, say your original action again.",
   },
   {
     id: "lock-file",

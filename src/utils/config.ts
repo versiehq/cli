@@ -4,6 +4,7 @@ import { join } from "node:path";
 export interface VersieConfig {
   liveBranch: string;
   devBranch: string;
+  releases?: string[];       // versie-created release tags e.g. ["v1", "v2", "v3"]
   verbose?: boolean;        // default false — brief output; set true for detailed output
   showGitCommands?: boolean; // default false — append underlying git commands to output
 }

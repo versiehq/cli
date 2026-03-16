@@ -14,64 +14,105 @@ const execFileAsync = promisify(execFile);
  * returns a welcome message. Returns null if already initialized so the tool
  * continues its normal flow.
  */
-export async function checkFirstRun(repoPath: string): Promise<string | null> {
+export async function checkFirstRun(repoPath: string, githubUrl?: string): Promise<string | null> {
   // Check 1: Is this a git repo?
   const gitCheck = await git(["rev-parse", "--git-dir"], repoPath);
   if (gitCheck.exitCode !== 0) {
-    const ghAvailable = await isGhAvailable();
-    if (ghAvailable) {
+    const name = getProjectName(repoPath);
+
+    if (await isGhAvailable()) {
+      // Auto-setup: init, commit, create GitHub repo, push — all without user running anything
+      const initErr = await runLocalInit(repoPath);
+      if (initErr) return initErr;
+      try {
+        await execFileAsync("gh", ["repo", "create", name, "--private", "--source=.", "--push"], {
+          cwd: repoPath, env: process.env, timeout: 30_000,
+        });
+      } catch (e: unknown) {
+        const err = e as { stderr?: string; stdout?: string; message?: string };
+        const msg = ((err.stderr ?? "") + (err.stdout ?? "") + (err.message ?? "")).trim();
+        return (
+          `I saved a local copy of your work but couldn't create the GitHub repo automatically.\n\n` +
+          `Details: ${msg}\n\n` +
+          `Go to [github.com/new](https://github.com/new), create an empty private repo, copy the SSH URL, then tell me:\n` +
+          `**"set up versie with git@github.com:you/your-repo.git"**`
+        );
+      }
+      await ensureInitialized(repoPath);
+      return `Versie is set up! Your work saves safely here — your live app only changes when you say "ship it".\nSay **"save my work"** to save, **"ship it"** to go live, or **"list commands"** to see all options.`;
+    }
+
+    if (githubUrl) {
+      // User provided the GitHub URL — do the full local + remote setup
+      const initErr = await runLocalInit(repoPath);
+      if (initErr) return initErr;
+      return await connectRemote(repoPath, githubUrl);
+    }
+
+    if (await isSshGithubAvailable()) {
+      // SSH works — run local setup, then ask for the URL (one step instead of five)
+      const initErr = await runLocalInit(repoPath);
+      if (initErr) return initErr;
       return (
-        `This folder isn't set up as a project yet — there's no version history here.\n\n` +
-        `I can set it up on GitHub automatically. Run these commands:\n` +
-        "```\n" +
-        `git init && git add -A && git commit -m "Initial save"\n` +
-        `gh repo create ${getProjectName(repoPath)} --private --source=. --push\n` +
-        "```\n" +
-        `Once that's done, say your original request again and I'll continue.`
+        `I've saved a local copy of your work. Now I just need a GitHub repo to back it up.\n\n` +
+        `1. Go to [github.com/new](https://github.com/new) and create a new repository (name it anything — keep it private for now, skip the README)\n` +
+        `2. Copy the **SSH URL** from the "Quick setup" box — it looks like \`git@github.com:you/your-repo.git\`\n` +
+        `3. Come back and tell me: **"set up versie with git@github.com:you/your-repo.git"** (replace with your URL)`
       );
     }
+
     return (
-      `This folder isn't set up as a project yet — there's no version history here.\n\n` +
-      `To get started:\n` +
-      `1. Go to [github.com/new](https://github.com/new) and create a new repository\n` +
-      `2. Copy the repository URL\n` +
-      `3. Run these commands (replacing the URL with yours):\n` +
-      "```\n" +
-      `git init\n` +
-      `git add -A\n` +
-      `git commit -m "Initial save"\n` +
-      `git remote add origin https://github.com/yourname/your-project.git\n` +
-      `git push -u origin main\n` +
-      "```\n" +
-      `Once that's done, say your original request again and I'll continue.`
+      `This folder isn't set up as a project yet.\n\n` +
+      `The easiest way to get started is the GitHub CLI:\n` +
+      `1. Install it: \`brew install gh\` (or download from https://cli.github.com)\n` +
+      `2. Sign in: \`gh auth login\` — opens your browser\n` +
+      `3. Come back and say "versie setup" — I'll handle everything from there`
     );
   }
 
   // Check 2: Is there a remote?
   const remoteCheck = await git(["remote"], repoPath);
   if (remoteCheck.exitCode === 0 && !remoteCheck.stdout.trim()) {
-    const ghAvailable = await isGhAvailable();
-    if (ghAvailable) {
+    const name = getProjectName(repoPath);
+
+    if (await isGhAvailable()) {
+      try {
+        await execFileAsync("gh", ["repo", "create", name, "--private", "--source=.", "--push"], {
+          cwd: repoPath, env: process.env, timeout: 30_000,
+        });
+      } catch (e: unknown) {
+        const err = e as { stderr?: string; stdout?: string; message?: string };
+        const msg = ((err.stderr ?? "") + (err.stdout ?? "") + (err.message ?? "")).trim();
+        return (
+          `Your project has local history but I couldn't connect it to GitHub automatically.\n\n` +
+          `Details: ${msg}\n\n` +
+          `Go to [github.com/new](https://github.com/new), create an empty private repo, copy the SSH URL, then tell me:\n` +
+          `**"set up versie with git@github.com:you/your-repo.git"**`
+        );
+      }
+      await ensureInitialized(repoPath);
+      return `Versie is set up! Your work saves safely here — your live app only changes when you say "ship it".\nSay **"save my work"** to save, **"ship it"** to go live, or **"list commands"** to see all options.`;
+    }
+
+    if (githubUrl) {
+      return await connectRemote(repoPath, githubUrl);
+    }
+
+    if (await isSshGithubAvailable()) {
       return (
-        `This project has local history but isn't connected to GitHub yet.\n\n` +
-        `I can connect it automatically. Run:\n` +
-        "```\n" +
-        `gh repo create ${getProjectName(repoPath)} --private --source=. --push\n` +
-        "```\n" +
-        `Once that's done, say your original request again and I'll continue.`
+        `Your project has local history but isn't connected to GitHub yet.\n\n` +
+        `1. Go to [github.com/new](https://github.com/new) and create a new **empty** repository (no README or .gitignore — keep it private for now)\n` +
+        `2. Copy the **SSH URL** from the "Quick setup" box\n` +
+        `3. Tell me: **"set up versie with git@github.com:you/your-repo.git"** (replace with your URL)`
       );
     }
+
     return (
-      `This project has local history but isn't connected to GitHub yet.\n\n` +
-      `To connect it:\n` +
-      `1. Go to [github.com/new](https://github.com/new) and create a new empty repository (no README or .gitignore)\n` +
-      `2. Copy the repository URL\n` +
-      `3. Run these commands (replacing the URL with yours):\n` +
-      "```\n" +
-      `git remote add origin https://github.com/yourname/your-project.git\n` +
-      `git push -u origin HEAD\n` +
-      "```\n" +
-      `Once that's done, say your original request again and I'll continue.`
+      `Your project has local history but isn't connected to GitHub.\n\n` +
+      `Install the GitHub CLI to connect automatically:\n` +
+      `1. Run: \`brew install gh\`\n` +
+      `2. Run: \`gh auth login\`\n` +
+      `3. Come back and say "versie setup"`
     );
   }
 
@@ -86,12 +127,56 @@ export async function checkFirstRun(repoPath: string): Promise<string | null> {
   );
 }
 
+/** Run git init + add -A + commit locally. Returns an error string on failure, null on success. */
+async function runLocalInit(repoPath: string): Promise<string | null> {
+  const initResult = await git(["init"], repoPath);
+  if (initResult.exitCode !== 0) {
+    return `Something went wrong starting version history: ${initResult.stderr}`;
+  }
+  await git(["add", "-A"], repoPath);
+  const commitResult = await git(["commit", "-m", "Initial save"], repoPath);
+  if (commitResult.exitCode !== 0) {
+    // Nothing to commit (empty dir) — make an empty commit so the branch exists
+    await git(["commit", "--allow-empty", "-m", "Initial save"], repoPath);
+  }
+  return null;
+}
+
+/** Connect an existing local repo to a GitHub remote and push. Returns success message or error. */
+async function connectRemote(repoPath: string, githubUrl: string): Promise<string> {
+  const remoteResult = await git(["remote", "add", "origin", githubUrl], repoPath);
+  if (remoteResult.exitCode !== 0) {
+    return `Couldn't connect to that URL — make sure you copied the SSH URL correctly from GitHub (it should start with \`git@github.com:\`).`;
+  }
+  const pushResult = await git(["push", "-u", "origin", "HEAD"], repoPath);
+  if (pushResult.exitCode !== 0) {
+    return `Couldn't push to GitHub. Make sure the repository is empty and you have access.\n\nDetails: ${pushResult.stderr}`;
+  }
+  await ensureInitialized(repoPath);
+  return `Versie is set up! Your work saves safely here — your live app only changes when you say "ship it".\nSay **"save my work"** to save, **"ship it"** to go live, or **"list commands"** to see all options.`;
+}
+
 async function isGhAvailable(): Promise<boolean> {
   try {
     await execFileAsync("gh", ["auth", "status"], { timeout: 5_000, env: process.env });
     return true;
   } catch {
     return false;
+  }
+}
+
+async function isSshGithubAvailable(): Promise<boolean> {
+  try {
+    // ssh -T always exits non-zero for GitHub — check output for success message
+    await execFileAsync(
+      "ssh",
+      ["-T", "-o", "StrictHostKeyChecking=accept-new", "-o", "ConnectTimeout=5", "git@github.com"],
+      { timeout: 8_000, env: process.env }
+    );
+    return true;
+  } catch (err: unknown) {
+    const e = err as { stdout?: string; stderr?: string };
+    return ((e.stdout ?? "") + (e.stderr ?? "")).toLowerCase().includes("successfully authenticated");
   }
 }
 
