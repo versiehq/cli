@@ -9,7 +9,7 @@ export const listCommandsSchema = {
     repo_path: z
       .string()
       .optional()
-      .describe("Absolute path to the project. Use the current workspace folder path. Only ask the user if the path cannot be determined from context."),
+      .describe("REQUIRED. Always set this to the absolute path of the current workspace folder — never omit it. The MCP server cannot determine the project path on its own."),
   }),
 };
 
@@ -47,11 +47,11 @@ export async function listCommands(args: z.infer<typeof listCommandsSchema.input
     `**Restoring**\n` +
     `- \`go back to live\` — Reset workspace to what's live\n` +
     `- \`go back to [name/time]\` — Restore a checkpoint or earlier version\n` +
-    `- \`create a checkpoint\` — Bookmark this moment (5 free, unlimited Pro)\n\n` +
+    `- \`create a checkpoint\` — Bookmark this moment so you can return to it\n\n` +
     `**Diagnostics**\n` +
     `- \`check my project health\` — Full status report\n` +
     `- \`fix this error: [message]\` — Diagnose and fix a Git error\n` +
     `- \`help with shipping setup\` — Configure Vercel/Netlify/Railway to only go live when you ship\n\n` +
-    `support@versie.co`
+    `Something broken? support@versie.co`
   );
 }

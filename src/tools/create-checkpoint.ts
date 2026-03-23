@@ -1,7 +1,7 @@
 import { z } from "zod/v4";
 import { git } from "../git/executor.js";
 import { checkFirstRun, ensureOnDev, resolveWorkingDir } from "../git/branches.js";
-import { createCheckpoint, listCheckpoints } from "../snapshots/manager.js";
+import { createCheckpoint } from "../snapshots/manager.js";
 
 export const createCheckpointSchema = {
   description:
@@ -15,7 +15,7 @@ export const createCheckpointSchema = {
     repo_path: z
       .string()
       .optional()
-      .describe("Absolute path to the project. Use the current workspace folder path. Only ask the user if the path cannot be determined from context."),
+      .describe("REQUIRED. Always set this to the absolute path of the current workspace folder — never omit it. The MCP server cannot determine the project path on its own."),
   }),
 };
 
@@ -35,20 +35,6 @@ export async function createCheckpointTool(args: z.infer<typeof createCheckpoint
 
   const result = await createCheckpoint(repoPath, args.name);
 
-  if (result.atLimit && !result.tagName) {
-    // Already at limit before creating
-    const existing = await listCheckpoints(repoPath);
-    const names = existing.map((t) => `  - ${t.replace("checkpoint/", "")}`).join("\n");
-    return (
-      `You've reached the 5-checkpoint limit. Your current checkpoints:\n${names}\n\n` +
-      `Upgrade to Pro for unlimited checkpoints — versie.co.`
-    );
-  }
-
-  const limitNote = result.atLimit
-    ? "\n\nYou're now at the 5-checkpoint limit. Upgrade to Pro for unlimited checkpoints — versie.co."
-    : "";
-
-  const gitNote = config.showGitCommands ? `\n(git: tag checkpoint/${args.name})` : "";
-  return `Checkpoint '${args.name}' saved — you can always return to this point.${limitNote}${gitNote}`;
+  const gitNote = config.showGitCommands ? `\n\`\`\`\ngit tag -a "${result.tagName}" -m "${args.name}"\ngit push origin "${result.tagName}"\n\`\`\`` : "";
+  return `Checkpoint '${args.name}' saved — you can always return to this point.${gitNote}`;
 }

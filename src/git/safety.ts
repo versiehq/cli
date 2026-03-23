@@ -145,5 +145,36 @@ export async function checkDeployConfig(
     // Config file issues — skip, non-critical
   }
 
+  // GitHub Actions: check for workflows that deploy on every push
+  try {
+    const { readdirSync, existsSync, readFileSync, statSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const workflowsDir = join(repoPath, ".github", "workflows");
+    if (existsSync(workflowsDir)) {
+      const files = readdirSync(workflowsDir).filter((f) => f.endsWith(".yml") || f.endsWith(".yaml"));
+      const MAX_SIZE = 1024 * 1024;
+      const broadFiles: string[] = [];
+      for (const file of files) {
+        const filePath = join(workflowsDir, file);
+        if (statSync(filePath).size > MAX_SIZE) continue;
+        const content = readFileSync(filePath, "utf-8");
+        const hasBroadPush =
+          /^on:\s*\n\s+push:\s*\n(?!\s+branches:)/m.test(content) ||
+          /push:\s*\n\s+branches:\s*\n\s+-\s*['"]\*['"]/m.test(content) ||
+          /^on:\s+\[push\]/m.test(content);
+        if (hasBroadPush) broadFiles.push(file);
+      }
+      if (broadFiles.length > 0) {
+        return (
+          `Your GitHub Actions workflow${broadFiles.length === 1 ? "" : "s"} (${broadFiles.join(", ")}) ` +
+          `may run on every save, not just when you ship. ` +
+          `Say "help with shipping setup" to fix ${broadFiles.length === 1 ? "it" : "them"}.`
+        );
+      }
+    }
+  } catch {
+    // Non-critical
+  }
+
   return null; // No issue found
 }

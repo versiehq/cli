@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { readConfig, writeConfig, resolveRepoPath } from "../../utils/config.js";
+import { readConfig, writeConfig } from "../../utils/config.js";
 
 let dir: string;
 
@@ -45,15 +45,5 @@ describe("writeConfig", () => {
     writeConfig(dir, { liveBranch: "main", devBranch: "versie-dev" });
     writeConfig(dir, { liveBranch: "master", devBranch: "versie-dev" });
     expect(readConfig(dir)?.liveBranch).toBe("master");
-  });
-});
-
-describe("resolveRepoPath", () => {
-  it("returns provided path when given", () => {
-    expect(resolveRepoPath("/my/project")).toBe("/my/project");
-  });
-
-  it("returns process.cwd() when undefined", () => {
-    expect(resolveRepoPath(undefined)).toBe(process.cwd());
   });
 });

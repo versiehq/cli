@@ -4,7 +4,6 @@ import { logger } from "../utils/logger.js";
 
 const CHECKPOINT_PREFIX = "checkpoint";
 const SNAPSHOT_PREFIX = "snapshot";
-const FREE_CHECKPOINT_LIMIT = 5;
 
 /**
  * Create an auto-snapshot before a destructive operation.
@@ -20,19 +19,12 @@ export async function createAutoSnapshot(repoPath: string): Promise<string> {
 
 /**
  * Create a named user checkpoint on versie-dev.
- * Enforces the 5-checkpoint limit on the free tier.
- * Returns { tagName, limitReached } — caller decides whether to show upgrade prompt.
+ * Checkpoints are unlimited in all tiers.
  */
 export async function createCheckpoint(
   repoPath: string,
   name: string
-): Promise<{ tagName: string; atLimit: boolean }> {
-  const existing = await listCheckpoints(repoPath);
-
-  if (existing.length >= FREE_CHECKPOINT_LIMIT) {
-    return { tagName: "", atLimit: true };
-  }
-
+): Promise<{ tagName: string }> {
   const safeName = name.replace(/[^a-zA-Z0-9-_]/g, "-").toLowerCase();
   const tagName = `${CHECKPOINT_PREFIX}/${safeName}`;
 
@@ -49,7 +41,7 @@ export async function createCheckpoint(
   await git(["push", "origin", tagName], repoPath);
 
   logger.info(`Checkpoint created: ${tagName}`);
-  return { tagName, atLimit: existing.length + 1 >= FREE_CHECKPOINT_LIMIT };
+  return { tagName };
 }
 
 /** List all user checkpoints (not auto-snapshots) */

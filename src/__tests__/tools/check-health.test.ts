@@ -7,7 +7,7 @@ vi.mock("../../git/executor.js", () => ({
 }));
 
 vi.mock("../../git/branches.js", () => ({
-  checkFirstRun: vi.fn(),
+  runSetupFlow: vi.fn(),
   ensureInitialized: vi.fn(),
   getDeployGap: vi.fn(),
   resolveWorkingDir: vi.fn(),
@@ -29,7 +29,7 @@ vi.mock("../../utils/config.js", () => ({
 }));
 
 import { git } from "../../git/executor.js";
-import { checkFirstRun, ensureInitialized, getDeployGap, resolveWorkingDir } from "../../git/branches.js";
+import { runSetupFlow, ensureInitialized, getDeployGap, resolveWorkingDir } from "../../git/branches.js";
 import { checkIsRepo, checkNoWorktrees, checkDeployConfig } from "../../git/safety.js";
 import { listCheckpoints } from "../../snapshots/manager.js";
 import { checkHealth } from "../../tools/check-health.js";
@@ -42,7 +42,7 @@ const mockCheckIsRepo = vi.mocked(checkIsRepo);
 const mockCheckNoWorktrees = vi.mocked(checkNoWorktrees);
 const mockCheckDeployConfig = vi.mocked(checkDeployConfig);
 const mockListCheckpoints = vi.mocked(listCheckpoints);
-const mockCheckFirstRun = vi.mocked(checkFirstRun);
+const mockRunSetupFlow = vi.mocked(runSetupFlow);
 
 function ok(stdout = ""): GitResult {
   return { stdout, stderr: "", exitCode: 0 };
@@ -53,7 +53,7 @@ const REPO = "/fake/repo";
 
 function setupDefaults() {
   mockResolveWorkingDir.mockResolvedValue(REPO);
-  mockCheckFirstRun.mockResolvedValue(null);
+  mockRunSetupFlow.mockResolvedValue(null);
   mockCheckIsRepo.mockResolvedValue({ ok: true });
   mockEnsureInitialized.mockResolvedValue(CONFIG);
   mockGetDeployGap.mockResolvedValue({ count: 0, summaries: [] });

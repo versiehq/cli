@@ -6,30 +6,74 @@ import { createAutoSnapshot, findCheckpoint, findRelease } from "../snapshots/ma
 export const goBackToSchema = {
   description:
     "Say 'go back to [checkpoint name or time]' to restore an earlier version. " +
-    "Say 'go back to live' to reset to what's currently live.",
+    "Say 'go back to live' to reset to what's currently live. " +
+    "Say 'go back to my last snapshot' to undo a previous restore.",
   inputSchema: z.object({
-    target: z
+    destination: z
       .string()
       .max(500)
+      .optional()
       .describe(
-        "What to restore to. Examples: 'live version', 'yesterday', 'before I added payments', 'mvp-ready'"
+        "REQUIRED. Where to go back to. Examples: 'live version', 'v1', 'yesterday', 'before I added payments', 'mvp-ready', 'last snapshot', 'hello world live'"
       ),
+    target: z.string().max(500).optional().describe("Alias for destination."),
+    version: z.string().max(500).optional().describe("Alias for destination."),
     repo_path: z
       .string()
       .optional()
-      .describe("Absolute path to the project. Use the current workspace folder path. Only ask the user if the path cannot be determined from context."),
+      .describe("REQUIRED. Always set this to the absolute path of the current workspace folder — never omit it. The MCP server cannot determine the project path on its own."),
   }),
 };
 
 const LIVE_PATTERNS =
   /\b(live|deployed|production|what.s live|current site|last deploy|last release)\b/i;
 
+const DISCARD_PATTERNS =
+  /\b(undo|discard|throw away|reset|revert|get rid of).*(changes|edits|modifications|work)\b|\bstart fresh\b/i;
+
+const SNAPSHOT_PATTERNS =
+  /\b(last snapshot|undo.*(restore|rollback)|recover.*(backup|backed up|snapshot)|my backup)\b/i;
+
 export async function goBackTo(args: z.infer<typeof goBackToSchema.inputSchema>): Promise<string> {
   const repoPath = await resolveWorkingDir(args.repo_path);
   const welcome = await checkFirstRun(repoPath);
   if (welcome) return welcome;
   const config = await ensureInitialized(repoPath);
-  const target = args.target;
+  const target = args.destination ?? args.target ?? args.version;
+  if (!target) return "Please tell me what to go back to — for example: 'live version', 'v1', or a checkpoint name.";
+
+  // Case 0: Discard unsaved changes only — no snapshot needed, purely a working tree reset.
+  if (DISCARD_PATTERNS.test(target)) {
+    const statusResult = await git(["status", "--porcelain"], repoPath);
+    if (!statusResult.stdout.trim()) {
+      return "Nothing to discard — your workspace is already clean.";
+    }
+    await git(["reset", "--hard", "HEAD"], repoPath);
+    await git(["clean", "-fd"], repoPath);
+    const gitNote = config.showGitCommands ? `\n\`\`\`\ngit reset --hard HEAD\ngit clean -fd\n\`\`\`` : "";
+    return `Done — your unsaved edits have been discarded. Your saves are untouched.${gitNote}`;
+  }
+
+  // Case 0.5: Recover the most recent auto-snapshot — no new snapshot needed.
+  if (SNAPSHOT_PATTERNS.test(target)) {
+    const tagResult = await git(["tag", "-l", "snapshot/*", "--sort=-creatordate"], repoPath);
+    const latestSnapshot = tagResult.stdout.split("\n").filter(Boolean)[0];
+    if (!latestSnapshot) {
+      return "No snapshots found — nothing to recover.";
+    }
+    await git(["checkout", config.devBranch], repoPath);
+    await git(["reset", "--hard", latestSnapshot], repoPath);
+    await git(["push", "--force-with-lease", "origin", config.devBranch], repoPath);
+    const gitNote = config.showGitCommands ? `\n\`\`\`\ngit reset --hard ${latestSnapshot}\ngit push --force-with-lease origin ${config.devBranch}\n\`\`\`` : "";
+    return `Restored to your backed-up work. Your live app wasn't affected — only your workspace was updated.${gitNote}`;
+  }
+
+  // Check for uncommitted changes before snapshotting — used to decide backup message.
+  const preRestoreStatus = await git(["status", "--porcelain"], repoPath);
+  const hadUncommittedChanges = preRestoreStatus.stdout.trim().length > 0;
+  const backupNote = hadUncommittedChanges
+    ? "\nYour previous work was backed up automatically — say 'go back to my last snapshot' to undo this."
+    : "\nSay 'go back to my last snapshot' to undo this.";
 
   // Always snapshot current state before a destructive restore.
   // If snapshot fails, abort — better to do nothing than lose work with no recovery point.
@@ -39,6 +83,24 @@ export async function goBackTo(args: z.infer<typeof goBackToSchema.inputSchema>)
     throw new Error(
       `Couldn't create a safety snapshot before restoring — your work hasn't been changed. ` +
       `Check that your project folder is accessible and try again. (${err instanceof Error ? err.message : String(err)})`
+    );
+  }
+
+  // Case 2 first: named checkpoint takes priority over live-pattern matching.
+  // A checkpoint named "hello world live" contains "live" but should restore
+  // the checkpoint, not reset to the live branch.
+  const checkpoint = await findCheckpoint(repoPath, target);
+  if (checkpoint) {
+    await git(["checkout", config.devBranch], repoPath);
+    await git(["reset", "--hard", checkpoint], repoPath);
+    await git(["push", "--force-with-lease", "origin", config.devBranch], repoPath);
+
+    const name = checkpoint.replace("checkpoint/", "");
+    const gitNote = config.showGitCommands ? `\n\`\`\`\ngit reset --hard ${checkpoint}\ngit push --force-with-lease origin ${config.devBranch}\n\`\`\`` : "";
+    return (
+      `Restored to checkpoint '${name}'.\n` +
+      `Your live app wasn't affected — only your workspace was updated.` +
+      `${backupNote}${gitNote}`
     );
   }
 
@@ -54,26 +116,10 @@ export async function goBackTo(args: z.infer<typeof goBackToSchema.inputSchema>)
       // Local-only repo or push failed — still report success locally
     }
 
-    const gitNote = config.showGitCommands ? `\n(git: reset --hard ${config.liveBranch} · push --force-with-lease)` : "";
+    const gitNote = config.showGitCommands ? `\n\`\`\`\ngit reset --hard ${config.liveBranch}\ngit push --force-with-lease origin ${config.devBranch}\n\`\`\`` : "";
     return (
-      `Restored to the live version. Your workspace now matches what's live.\n` +
-      `Your previous work was saved as a snapshot in case you need it.${gitNote}`
-    );
-  }
-
-  // Case 2: Try to find a named checkpoint
-  const checkpoint = await findCheckpoint(repoPath, target);
-  if (checkpoint) {
-    await git(["checkout", config.devBranch], repoPath);
-    await git(["reset", "--hard", checkpoint], repoPath);
-    await git(["push", "--force-with-lease", "origin", config.devBranch], repoPath);
-
-    const name = checkpoint.replace("checkpoint/", "");
-    const gitNote = config.showGitCommands ? `\n(git: reset --hard ${checkpoint} · push --force-with-lease)` : "";
-    return (
-      `Restored to checkpoint '${name}'.\n` +
-      `Your live app wasn't affected — only your workspace was updated.\n` +
-      `Your previous work was saved as a snapshot in case you need it.${gitNote}`
+      `Restored to the live version. Your workspace now matches what's live.` +
+      `${backupNote}${gitNote}`
     );
   }
 
@@ -84,11 +130,11 @@ export async function goBackTo(args: z.infer<typeof goBackToSchema.inputSchema>)
     await git(["reset", "--hard", releaseTag], repoPath);
     await git(["push", "--force-with-lease", "origin", config.devBranch], repoPath);
 
-    const gitNote = config.showGitCommands ? `\n(git: reset --hard ${releaseTag} · push --force-with-lease)` : "";
+    const gitNote = config.showGitCommands ? `\n\`\`\`\ngit reset --hard ${releaseTag}\ngit push --force-with-lease origin ${config.devBranch}\n\`\`\`` : "";
     return (
       `Restored to ${releaseTag} — your workspace now matches that shipped version.\n` +
-      `Your live app wasn't affected — only your workspace was updated.\n` +
-      `Your previous work was saved as a snapshot in case you need it.${gitNote}`
+      `Your live app wasn't affected — only your workspace was updated.` +
+      `${backupNote}${gitNote}`
     );
   }
 
@@ -124,11 +170,11 @@ export async function goBackTo(args: z.infer<typeof goBackToSchema.inputSchema>)
     await git(["reset", "--hard", match.hash], repoPath);
     await git(["push", "--force-with-lease", "origin", config.devBranch], repoPath);
 
-    const gitNote = config.showGitCommands ? `\n(git: reset --hard ${match.hash} · push --force-with-lease)` : "";
+    const gitNote = config.showGitCommands ? `\n\`\`\`\ngit reset --hard ${match.hash}\ngit push --force-with-lease origin ${config.devBranch}\n\`\`\`` : "";
     return (
       `Restored to '${match.message}' (${match.relDate}).\n` +
-      `Your live app wasn't affected — only your workspace was updated.\n` +
-      `Your previous work was saved as a snapshot in case you need it.${gitNote}`
+      `Your live app wasn't affected — only your workspace was updated.` +
+      `${backupNote}${gitNote}`
     );
   }
 
@@ -137,6 +183,7 @@ export async function goBackTo(args: z.infer<typeof goBackToSchema.inputSchema>)
     `I couldn't find '${target}' in your project history.\n\n` +
     `Try:\n` +
     `  - 'live version' — go back to what's currently live\n` +
+    `  - 'last snapshot' — undo a previous restore\n` +
     `  - A checkpoint name (say 'show my timeline' to see checkpoints)\n` +
     `  - A description like 'before I changed the header'`
   );

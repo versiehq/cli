@@ -105,36 +105,26 @@ describe("findCheckpoint", () => {
 });
 
 describe("createCheckpoint", () => {
-  it("creates a checkpoint and returns atLimit=false when below limit", async () => {
-    // listCheckpoints returns 3 existing
+  it("creates a checkpoint with sanitized name", async () => {
     mockGit
-      .mockResolvedValueOnce(ok("checkpoint/a\ncheckpoint/b\ncheckpoint/c"))
       .mockResolvedValueOnce(ok()) // tag -a
       .mockResolvedValueOnce(ok()); // push
 
     const result = await createCheckpoint(REPO, "my feature");
-    expect(result.atLimit).toBe(false);
     expect(result.tagName).toBe("checkpoint/my-feature");
   });
 
-  it("returns atLimit=true when at the 5-checkpoint limit", async () => {
-    mockGit.mockResolvedValueOnce(
-      ok(
-        "checkpoint/a\ncheckpoint/b\ncheckpoint/c\n" +
-          "checkpoint/d\ncheckpoint/e"
-      )
-    );
+  it("allows unlimited checkpoints (no limit enforcement)", async () => {
+    mockGit
+      .mockResolvedValueOnce(ok()) // tag -a
+      .mockResolvedValueOnce(ok()); // push
 
-    const result = await createCheckpoint(REPO, "sixth");
-    expect(result.atLimit).toBe(true);
-    expect(result.tagName).toBe("");
-    // Should not have tried to create the tag
-    expect(mockGit).toHaveBeenCalledTimes(1);
+    const result = await createCheckpoint(REPO, "tenth");
+    expect(result.tagName).toBe("checkpoint/tenth");
   });
 
   it("sanitizes checkpoint names to safe tag characters", async () => {
     mockGit
-      .mockResolvedValueOnce(ok("")) // listCheckpoints
       .mockResolvedValueOnce(ok()) // tag -a
       .mockResolvedValueOnce(ok()); // push
 
@@ -142,23 +132,8 @@ describe("createCheckpoint", () => {
     expect(result.tagName).toBe("checkpoint/my-feature--v2-0");
   });
 
-  it("returns atLimit=true when creating the fifth checkpoint (at limit after create)", async () => {
-    // 4 existing → after this one = 5 = at limit
-    mockGit
-      .mockResolvedValueOnce(
-        ok("checkpoint/a\ncheckpoint/b\ncheckpoint/c\ncheckpoint/d")
-      )
-      .mockResolvedValueOnce(ok())
-      .mockResolvedValueOnce(ok());
-
-    const result = await createCheckpoint(REPO, "fifth");
-    expect(result.atLimit).toBe(true);
-    expect(result.tagName).toBe("checkpoint/fifth");
-  });
-
   it("throws when git tag command fails", async () => {
     mockGit
-      .mockResolvedValueOnce(ok("")) // listCheckpoints
       .mockResolvedValueOnce(fail("tag already exists")); // tag -a fails
 
     await expect(createCheckpoint(REPO, "dupe")).rejects.toThrow(/Failed to create checkpoint/);

@@ -14,13 +14,21 @@ import { fixThisErrorSchema, fixThisError } from "./tools/fix-this-error.js";
 import { checkHealthSchema, checkHealth } from "./tools/check-health.js";
 import { listCommandsSchema, listCommands } from "./tools/list-commands.js";
 import { deployPlatformHelpSchema, deployPlatformHelp } from "./tools/deploy-platform-help.js";
+import { configureSettingsSchema, configureSettings } from "./tools/configure-settings.js";
 
 const server = new McpServer(
   { name: "versie", version: "1.0.0" },
   {
     instructions:
-      "When a Versie tool returns output, reproduce it verbatim in your response — " +
-      "do not reformat, summarize, or paraphrase it.",
+      "When the user mentions Versie or any version control task (saving work, deploying, going back, checkpoints), " +
+      "always call check_health first if you have not already done so in this conversation. " +
+      "check_health sets up Versie for new projects and verifies the project is ready before other tools run. " +
+      "When the user's message contains a GitHub SSH URL (any string matching git@github.com:...), " +
+      "call check_health immediately with github_url set to that URL — do not skip the github_url parameter. " +
+      "When the user says 'show git commands' or 'hide git commands', " +
+      "call check_health immediately with show_git_commands set to 'on' or 'off' — do not ask clarifying questions. " +
+      "When a Versie tool returns output, paste it directly into your response as plain text — " +
+      "no quotes, no code blocks, no rewording, no added commentary.",
   }
 );
 
@@ -51,9 +59,8 @@ function tool<T extends Record<string, unknown>>(
   };
 }
 
-// Append a universal output instruction to every tool description so Claude
-// always displays the tool output verbatim rather than summarizing or reformatting it.
-const VERBATIM = " Display the tool output verbatim in your response — do not reformat or summarize.";
+// Append a display instruction to every tool description.
+const VERBATIM = " Paste the tool output directly into your response as plain text — no quotes, no code blocks, no rewording.";
 function withVerbatim<S extends { description: string }>(schema: S): S {
   return { ...schema, description: schema.description + VERBATIM };
 }
@@ -67,13 +74,14 @@ server.registerTool("project_timeline", {
   ...projectTimelineSchema,
   description: projectTimelineSchema.description +
     " Display the tool output verbatim in your response — do not reformat or summarize." +
-    " Your response MUST end with exactly this line: ○ saved  ★ checkpoint  ● shipped live",
+    " Your response MUST end with exactly this line: ○ saved (workspace)  ★ checkpoint (workspace)  ● shipped live",
 }, tool(projectTimeline));
 server.registerTool("create_checkpoint", withVerbatim(createCheckpointSchema), tool(createCheckpointTool));
 server.registerTool("fix_this_error", withVerbatim(fixThisErrorSchema), tool(fixThisError));
 server.registerTool("check_health", withVerbatim(checkHealthSchema), tool(checkHealth));
 server.registerTool("list_commands", withVerbatim(listCommandsSchema), tool(listCommands));
 server.registerTool("deploy_platform_help", withVerbatim(deployPlatformHelpSchema), tool(deployPlatformHelp));
+server.registerTool("configure_settings", withVerbatim(configureSettingsSchema), tool(configureSettings));
 
 async function main(): Promise<void> {
   if (process.argv.includes("--install")) {

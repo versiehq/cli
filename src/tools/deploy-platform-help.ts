@@ -16,7 +16,7 @@ export const deployPlatformHelpSchema = {
     repo_path: z
       .string()
       .optional()
-      .describe("Absolute path to the project. Use the current workspace folder path. Only ask the user if the path cannot be determined from context."),
+      .describe("REQUIRED. Always set this to the absolute path of the current workspace folder — never omit it. The MCP server cannot determine the project path on its own."),
   }),
 };
 
@@ -41,13 +41,13 @@ export async function deployPlatformHelp(args: z.infer<typeof deployPlatformHelp
       `\n\nGITHUB ACTIONS — AUTO-FIXED\n` +
       `I updated ${ghActionsResult.fixed.length} workflow file${ghActionsResult.fixed.length === 1 ? "" : "s"} ` +
       `to only go live when you ship:\n` +
-      ghActionsResult.fixed.map((f) => `  ✓ ${f}`).join("\n") +
+      ghActionsResult.fixed.map((f) => `  ✓ ${f}`).join("\n\n") +
       `\nSave and ship these changes to apply the fix.`;
   } else if (ghActionsResult.detected.length > 0) {
     ghActionsNote =
       `\n\nGITHUB ACTIONS WARNING\n` +
       `${ghActionsResult.detected.length} workflow file${ghActionsResult.detected.length === 1 ? "" : "s"} may go live on every save:\n` +
-      ghActionsResult.detected.map((f) => `  ⚠ ${f}`).join("\n") +
+      ghActionsResult.detected.map((f) => `  ⚠ ${f}`).join("\n\n") +
       `\nOpen each file in GitHub (github.com → your repo → .github/workflows) ` +
       `and change 'on: push' to only run on the '${liveBranch}' branch.`;
   }
@@ -157,7 +157,13 @@ function vercelHelp(liveBranch: string): string {
     `  1. Go to vercel.com → your project\n` +
     `  2. Click Settings → Environments\n` +
     `  3. Under Production, make sure the branch is set to '${liveBranch}'\n\n` +
-    `Preview builds on versie-dev are fine — those are private previews only.`
+    `Preview builds on versie-dev are harmless — private previews only, no effect on your live app.\n\n` +
+    `**Optional:** To stop preview builds on versie-dev (saves build minutes):\n` +
+    `  1. Go to vercel.com → your project → Settings → Build and Deployment\n` +
+    `  2. Scroll to Ignored Build Step → select Custom and enter:\n` +
+    `     if [ "$VERCEL_GIT_COMMIT_REF" == "versie-dev" ]; then exit 0; else exit 1; fi\n` +
+    `  3. Click Save\n\n` +
+    `That's it — you're fully set up. Say "ship it" whenever you're ready to go live.`
   );
 }
 

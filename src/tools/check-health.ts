@@ -1,6 +1,8 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { z } from "zod/v4";
 import { git } from "../git/executor.js";
-import { checkFirstRun, ensureInitialized, getDeployGap, resolveWorkingDir } from "../git/branches.js";
+import { runSetupFlow, ensureInitialized, getDeployGap, resolveWorkingDir } from "../git/branches.js";
 import { checkIsRepo, checkDeployConfig, checkNoWorktrees } from "../git/safety.js";
 import { listCheckpoints } from "../snapshots/manager.js";
 import { readConfig, writeConfig } from "../utils/config.js";
@@ -8,34 +10,45 @@ import { readConfig, writeConfig } from "../utils/config.js";
 export const checkHealthSchema = {
   description:
     "Say 'setup versie', 'check health', 'project health', 'get started', or 'check my project' to initialize or check project status. " +
-    "Say 'turn on/off verbose mode' to toggle detailed output. " +
-    "Say 'show git commands' or 'hide git commands' to toggle showing the underlying git operations. " +
-    "If the user provides a GitHub SSH URL (e.g. 'set up versie with git@github.com:you/repo.git'), pass it as github_url.",
+    "If the user provides a GitHub SSH URL (e.g. 'set up versie with git@github.com:you/repo.git'), pass it as github_url. " +
+    "For 'show git commands' or 'hide git commands', call this tool with show_git_commands set to 'on' or 'off'.",
   inputSchema: z.object({
     github_url: z
       .string()
       .optional()
-      .describe("GitHub SSH URL provided by the user (e.g. git@github.com:you/repo.git). Only set when the user explicitly gives a URL to connect their project to GitHub."),
-    verbose: z
-      .enum(["on", "off"])
-      .optional()
-      .describe("Set to 'on' to enable verbose output for all tools, 'off' to return to brief output. Only set when user explicitly asks to change verbose mode."),
-    show_git_commands: z
-      .enum(["on", "off"])
-      .optional()
-      .describe("Set to 'on' to show underlying git commands in output, 'off' to hide them. Only set when user explicitly asks to toggle this."),
+      .describe("Set to any git@github.com:... URL that appears in the user's message — even if they only paste the URL or say 'set up versie with git@github.com:you/repo.git'. Always extract and pass the URL; never ignore it."),
     repo_path: z
       .string()
       .optional()
-      .describe("Absolute path to the project. Use the current workspace folder path. Only ask the user if the path cannot be determined from context."),
+      .describe("REQUIRED. Always set this to the absolute path of the current workspace folder — never omit it. The MCP server cannot determine the project path on its own."),
+    workspace_name: z
+      .string()
+      .optional()
+      .describe("Optional name for the workspace branch. Defaults to 'versie-dev'. Only used during first-time setup — if the user says something like 'call my workspace dev' or 'use dev as the branch name', pass it here."),
+    show_git_commands: z
+      .enum(["on", "off"])
+      .optional()
+      .describe("Set to 'on' when the user says 'show git commands', 'off' when they say 'hide git commands'. Toggles whether Versie tools append the underlying git operations to their output."),
   }),
 };
 
 export async function checkHealth(args: z.infer<typeof checkHealthSchema.inputSchema>): Promise<string> {
   const repoPath = await resolveWorkingDir(args.repo_path);
-  const welcome = await checkFirstRun(repoPath, args.github_url);
+
+  // Handle settings toggle — works regardless of setup state
+  if (args.show_git_commands !== undefined) {
+    const config = readConfig(repoPath);
+    if (!config) return "Versie isn't set up yet — say 'versie setup' to get started.";
+    writeConfig(repoPath, { ...config, showGitCommands: args.show_git_commands === "on" });
+    return args.show_git_commands === "on"
+      ? "Git commands on — tools will now show the underlying git operations."
+      : "Git commands off — tools will show plain output again.";
+  }
+
+  const welcome = await runSetupFlow(repoPath, args.github_url, args.workspace_name);
   if (welcome) {
-    // If Versie was just initialized (config now exists), also check deploy platform
+    // Only run deploy checks after actual completion (config written by ensureInitialized).
+    // Intermediate messages (e.g. "waiting for SSH URL") return before config is written.
     const config = readConfig(repoPath);
     if (config) {
       const deployWarning = await checkDeployConfig(repoPath, config.liveBranch);
@@ -48,28 +61,6 @@ export async function checkHealth(args: z.infer<typeof checkHealthSchema.inputSc
       }
     }
     return welcome;
-  }
-
-  // Verbose mode toggle
-  if (args.verbose !== undefined) {
-    const config = readConfig(repoPath);
-    if (config) {
-      writeConfig(repoPath, { ...config, verbose: args.verbose === "on" });
-      return args.verbose === "on"
-        ? "Verbose mode on — tools will now show detailed output."
-        : "Verbose mode off — tools will now show brief output.";
-    }
-  }
-
-  // Show git commands toggle
-  if (args.show_git_commands !== undefined) {
-    const config = readConfig(repoPath);
-    if (config) {
-      writeConfig(repoPath, { ...config, showGitCommands: args.show_git_commands === "on" });
-      return args.show_git_commands === "on"
-        ? "Git commands on — tools will now show the underlying git operations in parentheses."
-        : "Git commands off — tools will show plain output again.";
-    }
   }
 
   // 1. Verify git repo
@@ -148,5 +139,5 @@ export async function checkHealth(args: z.infer<typeof checkHealthSchema.inputSc
     checks.push(`⚠ ${deployWarningMsg}`);
   }
 
-  return checks.join("\n");
+  return checks.join("\n\n");
 }

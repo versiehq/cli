@@ -8,16 +8,36 @@ import { logger } from "../utils/logger.js";
 
 const execFileAsync = promisify(execFile);
 
+/** Completion message shown after successful setup — must stay in sync with SKILL.md step 10. */
+const SETUP_COMPLETE_MESSAGE =
+  `Versie is set up! Your work saves safely here — your live app only changes when you say "ship it." Save freely.\n\n` +
+  `Say **"save my work"** to save, **"ship it"** to go live, or **"list commands"** to see all options.\n\n` +
+  `Before your first ship: if you have your GitHub repo connected to Vercel, Netlify, or another platform, ` +
+  `say **"help with shipping setup"** so only "ship it" triggers live deployments — not every save.`;
+
 /**
- * Call at the top of every tool handler (after resolveWorkingDir).
- * If Versie hasn't been set up in this repo yet, runs initialization and
- * returns a welcome message. Returns null if already initialized so the tool
- * continues its normal flow.
+ * Lightweight guard called at the top of every tool except check_health.
+ * If Versie isn't set up for this project, returns a redirect message.
+ * Returns null if the project is ready so the tool continues its normal flow.
  */
-export async function checkFirstRun(repoPath: string, githubUrl?: string): Promise<string | null> {
-  // Check 1: Is this a git repo?
-  const gitCheck = await git(["rev-parse", "--git-dir"], repoPath);
-  if (gitCheck.exitCode !== 0) {
+export async function checkFirstRun(repoPath: string): Promise<string | null> {
+  if (readConfig(repoPath) !== null) return null;
+  return "Versie isn't set up for this project yet. Say **'versie setup'** or **'check my project health'** to get started.";
+}
+
+/**
+ * Full setup flow — called only by check_health.
+ * Handles git init, GitHub connection, and Versie initialization.
+ * Returns a welcome/setup/instructions message, or null if already initialized.
+ */
+export async function runSetupFlow(repoPath: string, githubUrl?: string, devBranchName?: string): Promise<string | null> {
+  // Check 1: Does this project have its OWN git repo?
+  // Using --show-toplevel so we detect both "no git at all" and "inside a parent git repo"
+  // (e.g. ~/workspace/vtest when ~ is accidentally a git repo). In either case we need
+  // to run git init at repoPath to isolate this project's history.
+  const gitRoot = await git(["rev-parse", "--show-toplevel"], repoPath);
+  const hasOwnGit = gitRoot.exitCode === 0 && gitRoot.stdout.trim() === repoPath;
+  if (!hasOwnGit) {
     const name = getProjectName(repoPath);
 
     if (await isGhAvailable()) {
@@ -38,26 +58,27 @@ export async function checkFirstRun(repoPath: string, githubUrl?: string): Promi
           `**"set up versie with git@github.com:you/your-repo.git"**`
         );
       }
-      await ensureInitialized(repoPath);
-      return `Versie is set up! Your work saves safely here — your live app only changes when you say "ship it".\nSay **"save my work"** to save, **"ship it"** to go live, or **"list commands"** to see all options.`;
+      await ensureInitialized(repoPath, devBranchName);
+      return SETUP_COMPLETE_MESSAGE;
     }
 
     if (githubUrl) {
       // User provided the GitHub URL — do the full local + remote setup
       const initErr = await runLocalInit(repoPath);
       if (initErr) return initErr;
-      return await connectRemote(repoPath, githubUrl);
+      return await connectRemote(repoPath, githubUrl, devBranchName);
     }
 
     if (await isSshGithubAvailable()) {
       // SSH works — run local setup, then ask for the URL (one step instead of five)
       const initErr = await runLocalInit(repoPath);
       if (initErr) return initErr;
+      ensureCursorRulesSetupPending(repoPath);
       return (
         `I've saved a local copy of your work. Now I just need a GitHub repo to back it up.\n\n` +
         `1. Go to [github.com/new](https://github.com/new) and create a new repository (name it anything — keep it private for now, skip the README)\n` +
         `2. Copy the **SSH URL** from the "Quick setup" box — it looks like \`git@github.com:you/your-repo.git\`\n` +
-        `3. Come back and tell me: **"set up versie with git@github.com:you/your-repo.git"** (replace with your URL)`
+        `3. Tell me: **"set up versie with git@github.com:you/your-repo.git"** (with your actual URL)`
       );
     }
 
@@ -90,20 +111,21 @@ export async function checkFirstRun(repoPath: string, githubUrl?: string): Promi
           `**"set up versie with git@github.com:you/your-repo.git"**`
         );
       }
-      await ensureInitialized(repoPath);
-      return `Versie is set up! Your work saves safely here — your live app only changes when you say "ship it".\nSay **"save my work"** to save, **"ship it"** to go live, or **"list commands"** to see all options.`;
+      await ensureInitialized(repoPath, devBranchName);
+      return SETUP_COMPLETE_MESSAGE;
     }
 
     if (githubUrl) {
-      return await connectRemote(repoPath, githubUrl);
+      return await connectRemote(repoPath, githubUrl, devBranchName);
     }
 
     if (await isSshGithubAvailable()) {
+      ensureCursorRulesSetupPending(repoPath);
       return (
         `Your project has local history but isn't connected to GitHub yet.\n\n` +
         `1. Go to [github.com/new](https://github.com/new) and create a new **empty** repository (no README or .gitignore — keep it private for now)\n` +
         `2. Copy the **SSH URL** from the "Quick setup" box\n` +
-        `3. Tell me: **"set up versie with git@github.com:you/your-repo.git"** (replace with your URL)`
+        `3. Tell me: **"set up versie with git@github.com:you/your-repo.git"** (with your actual URL)`
       );
     }
 
@@ -117,14 +139,20 @@ export async function checkFirstRun(repoPath: string, githubUrl?: string): Promi
   }
 
   if (readConfig(repoPath) !== null) {
-    ensureCursorRules(repoPath); // backfill for projects initialized before this feature
-    return null;
+    // Sanity check: config exists but verify git root still matches. A project can end up
+    // with a Versie config but git running against a parent repo (e.g. if setup ran before
+    // this project had its own .git). If so, fall through and re-initialize.
+    const rootCheck = await git(["rev-parse", "--show-toplevel"], repoPath);
+    if (rootCheck.exitCode !== 0 || rootCheck.stdout.trim() !== repoPath) {
+      logger.info("Versie config exists but git root does not match — re-initializing");
+      // fall through to ensureInitialized below
+    } else {
+      ensureCursorRules(repoPath); // backfill for projects initialized before this feature
+      return null;
+    }
   }
-  await ensureInitialized(repoPath);
-  return (
-    `Versie is set up! Your work saves safely here — your live app only changes when you say "ship it".\n` +
-    `Say **"save my work"** to save, **"ship it"** to go live, or **"list commands"** to see all options.`
-  );
+  await ensureInitialized(repoPath, devBranchName);
+  return SETUP_COMPLETE_MESSAGE;
 }
 
 /** Run git init + add -A + commit locally. Returns an error string on failure, null on success. */
@@ -143,7 +171,7 @@ async function runLocalInit(repoPath: string): Promise<string | null> {
 }
 
 /** Connect an existing local repo to a GitHub remote and push. Returns success message or error. */
-async function connectRemote(repoPath: string, githubUrl: string): Promise<string> {
+async function connectRemote(repoPath: string, githubUrl: string, devBranchName?: string): Promise<string> {
   const remoteResult = await git(["remote", "add", "origin", githubUrl], repoPath);
   if (remoteResult.exitCode !== 0) {
     return `Couldn't connect to that URL — make sure you copied the SSH URL correctly from GitHub (it should start with \`git@github.com:\`).`;
@@ -152,8 +180,8 @@ async function connectRemote(repoPath: string, githubUrl: string): Promise<strin
   if (pushResult.exitCode !== 0) {
     return `Couldn't push to GitHub. Make sure the repository is empty and you have access.\n\nDetails: ${pushResult.stderr}`;
   }
-  await ensureInitialized(repoPath);
-  return `Versie is set up! Your work saves safely here — your live app only changes when you say "ship it".\nSay **"save my work"** to save, **"ship it"** to go live, or **"list commands"** to see all options.`;
+  await ensureInitialized(repoPath, devBranchName);
+  return SETUP_COMPLETE_MESSAGE;
 }
 
 async function isGhAvailable(): Promise<boolean> {
@@ -186,6 +214,36 @@ function getProjectName(repoPath: string): string {
 
 const DEV_BRANCH = "versie-dev";
 
+/**
+ * Write a temporary .cursor/rules/versie.mdc that tells Cursor exactly what to do
+ * when the user pastes a GitHub URL. Called while waiting for the URL, before
+ * setup is complete. Overwritten by ensureCursorRules once setup finishes.
+ */
+function ensureCursorRulesSetupPending(repoPath: string): void {
+  if (!existsSync(join(repoPath, ".git"))) return;
+  const cursorRulesDir = join(repoPath, ".cursor", "rules");
+  const cursorRulesPath = join(cursorRulesDir, "versie.mdc");
+  // Don't overwrite if the final rules are already written
+  if (existsSync(cursorRulesPath) && readFileSync(cursorRulesPath, "utf-8").includes("alwaysApply: true") && !readFileSync(cursorRulesPath, "utf-8").includes("setup is in progress")) return;
+  const content = `---
+description: Versie version control setup in progress
+globs:
+alwaysApply: true
+---
+Versie setup is in progress for this project. When the user provides or pastes a GitHub SSH URL (format: git@github.com:user/repo.git):
+- Immediately call the check_health Versie MCP tool
+- Pass the URL as the github_url parameter
+- Pass repo_path="${repoPath}"
+- Do not run any git commands yourself — Versie handles the GitHub connection
+`;
+  try {
+    mkdirSync(cursorRulesDir, { recursive: true });
+    writeFileSync(cursorRulesPath, content, "utf-8");
+  } catch {
+    // Non-critical — setup can continue without cursor rules
+  }
+}
+
 /** Write .cursor/rules/versie.mdc so Cursor's AI auto-discovers Versie tools and knows the project path. */
 function ensureCursorRules(repoPath: string): void {
   // Never write outside a real project directory
@@ -199,12 +257,48 @@ alwaysApply: true
 ---
 Use the Versie MCP tools for all save, deploy, and version control operations in this project.
 Always pass repo_path="${repoPath}" when calling any Versie MCP tool. Never ask the user for the project path.
-Say "save my work" to save, "ship it" to deploy, "list commands" to see all options.
 `;
   // Write if missing or if the hardcoded path has changed (e.g. project moved)
   if (existsSync(cursorRulesPath) && readFileSync(cursorRulesPath, "utf-8") === content) return;
   mkdirSync(cursorRulesDir, { recursive: true });
   writeFileSync(cursorRulesPath, content, "utf-8");
+}
+
+/** Write .claude/settings.json to disable worktrees — they bypass Versie's dev/live model. */
+function ensureClaudeSettings(repoPath: string): void {
+  if (!existsSync(join(repoPath, ".git"))) return;
+  const claudeDir = join(repoPath, ".claude");
+  const settingsPath = join(claudeDir, "settings.json");
+
+  const worktreeHook = {
+    hooks: [
+      {
+        type: "command",
+        command: "echo 'Versie manages your branches — worktrees are disabled to keep your dev/live model safe.' && exit 1",
+      },
+    ],
+  };
+
+  // Merge into existing settings if present
+  let existing: Record<string, unknown> = {};
+  if (existsSync(settingsPath)) {
+    try {
+      existing = JSON.parse(readFileSync(settingsPath, "utf-8"));
+    } catch {
+      // Corrupted file — overwrite
+    }
+  }
+
+  const hooks = (existing.hooks ?? {}) as Record<string, unknown>;
+  // Don't overwrite if user already has a WorktreeCreate hook
+  if (hooks.WorktreeCreate) return;
+
+  hooks.WorktreeCreate = [worktreeHook];
+  existing.hooks = hooks;
+
+  const content = JSON.stringify(existing, null, 2) + "\n";
+  mkdirSync(claudeDir, { recursive: true });
+  writeFileSync(settingsPath, content, "utf-8");
 }
 
 export { VersieConfig };
@@ -219,16 +313,17 @@ export { VersieConfig };
  *   - adds .versie/ to .gitignore
  * Returns the config.
  */
-export async function ensureInitialized(repoPath: string): Promise<VersieConfig> {
+export async function ensureInitialized(repoPath: string, devBranchName?: string): Promise<VersieConfig> {
   const existing = readConfig(repoPath);
   if (existing) return existing;
 
-  logger.info("First run — setting up Versie for this project");
+  const dev = devBranchName ?? DEV_BRANCH;
+  logger.info(`First run — setting up Versie for this project (workspace: ${dev})`);
 
   // Detect live branch
   const liveBranch = await detectLiveBranch(repoPath);
 
-  // Stash uncommitted changes if any, so we can create versie-dev safely
+  // Stash uncommitted changes if any, so we can create the workspace branch safely
   const statusResult = await git(["status", "--porcelain"], repoPath);
   const hasUncommitted = statusResult.stdout.trim().length > 0;
   if (hasUncommitted) {
@@ -242,17 +337,17 @@ export async function ensureInitialized(repoPath: string): Promise<VersieConfig>
     logger.debug("Could not push live branch to remote — continuing with local-only setup");
   }
 
-  // Create or checkout versie-dev
-  const devExists = await git(["rev-parse", "--verify", DEV_BRANCH], repoPath);
+  // Create or checkout workspace branch
+  const devExists = await git(["rev-parse", "--verify", dev], repoPath);
   if (devExists.exitCode !== 0) {
-    await git(["checkout", "-b", DEV_BRANCH], repoPath);
+    await git(["checkout", "-b", dev], repoPath);
     // Push to remote (best effort — local-only repos are fine too)
-    const pushResult = await git(["push", "-u", "origin", DEV_BRANCH], repoPath);
+    const pushResult = await git(["push", "-u", "origin", dev], repoPath);
     if (pushResult.exitCode !== 0) {
       logger.debug("No remote or push failed — continuing with local-only setup");
     }
   } else {
-    await git(["checkout", DEV_BRANCH], repoPath);
+    await git(["checkout", dev], repoPath);
   }
 
   // Apply stash if we stashed earlier
@@ -261,7 +356,7 @@ export async function ensureInitialized(repoPath: string): Promise<VersieConfig>
   }
 
   // Write config
-  const config: VersieConfig = { liveBranch, devBranch: DEV_BRANCH };
+  const config: VersieConfig = { liveBranch, devBranch: dev };
   writeConfig(repoPath, config);
 
   // Add .versie/ to .gitignore (create the file if it doesn't exist yet)
@@ -272,8 +367,9 @@ export async function ensureInitialized(repoPath: string): Promise<VersieConfig>
   }
 
   ensureCursorRules(repoPath);
+  ensureClaudeSettings(repoPath);
 
-  logger.info(`Versie initialized: live=${liveBranch}, dev=${DEV_BRANCH}`);
+  logger.info(`Versie initialized: live=${liveBranch}, dev=${dev}`);
   return config;
 }
 
@@ -328,7 +424,17 @@ export function isClaudeWorktree(repoPath?: string): boolean {
 }
 
 export async function resolveWorkingDir(repoPath?: string): Promise<string> {
-  const base = repoPath ?? process.cwd();
+  // process.cwd() in an MCP subprocess is wherever the server was launched (often ~),
+  // not the user's project. We require repo_path to always be passed by the client.
+  // If missing, throw so the tool returns a clear error rather than silently using the wrong dir.
+  if (!repoPath) {
+    throw new Error("repo_path is required — pass the absolute path to your project folder.");
+  }
+  const base = repoPath;
+  // Only resolve the git common directory when inside a Claude Code worktree.
+  // Without this guard, a project inside a parent git repo (e.g. ~/workspace/vtest
+  // when ~ is accidentally a git repo) would resolve to the parent root instead.
+  if (!base.includes("/.claude/worktrees/")) return base;
   const result = await git(["rev-parse", "--git-common-dir"], base);
   if (result.exitCode !== 0) return base;
   const commonDir = result.stdout.trim();

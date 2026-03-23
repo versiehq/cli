@@ -14,7 +14,7 @@ export const whatsChangedSchema = {
     repo_path: z
       .string()
       .optional()
-      .describe("Absolute path to the project. Use the current workspace folder path. Only ask the user if the path cannot be determined from context."),
+      .describe("REQUIRED. Always set this to the absolute path of the current workspace folder — never omit it. The MCP server cannot determine the project path on its own."),
   }),
 };
 
@@ -29,7 +29,7 @@ export async function whatsChanged(args: z.infer<typeof whatsChangedSchema.input
   // Helper: build the "since last save" section
   async function unsavedSection(): Promise<string> {
     const statusResult = await git(["status", "--porcelain"], repoPath);
-    const gitNote = config.showGitCommands ? `\n(git: status)` : "";
+    const gitNote = config.showGitCommands ? `\n\`\`\`\ngit status\n\`\`\`` : "";
     if (!statusResult.stdout.trim()) {
       return `**Since your last save:** Everything is saved — no new changes.${gitNote}`;
     }
@@ -48,21 +48,21 @@ export async function whatsChanged(args: z.infer<typeof whatsChangedSchema.input
     if (removed.length > 0) parts.push(`Removed: ${removed.join(", ")}`);
     const total = updated.length + added.length + removed.length;
     return (
-      `**Since your last save:** ${total} file${total === 1 ? "" : "s"} changed:\n` +
-      `${parts.join("\n")}\n\nSay 'save my work' to save these.${gitNote}`
+      `**Since your last save:** ${total} file${total === 1 ? "" : "s"} changed:\n\n` +
+      `${parts.join("\n\n")}\n\nSay 'save my work' to save these.${gitNote}`
     );
   }
 
   // Helper: build the "not yet live" section
   async function notLiveSection(): Promise<string> {
     const gap = await getDeployGap(repoPath, config);
-    const gitNote = config.showGitCommands ? `\n(git: log ${config.liveBranch}..${config.devBranch})` : "";
+    const gitNote = config.showGitCommands ? `\n\`\`\`\ngit log ${config.liveBranch}..${config.devBranch} --oneline\n\`\`\`` : "";
     if (gap.count === 0) {
       return `**Not yet live:** Everything you've saved is already live.${gitNote}`;
     }
-    const lines = gap.summaries.map((s) => `  - ${s}`).join("\n");
+    const lines = gap.summaries.map((s) => `  - ${s}`).join("\n\n");
     return (
-      `**Not yet live** (${gap.count} save${gap.count === 1 ? "" : "s"}):\n${lines}\n\n` +
+      `**Not yet live** (${gap.count} save${gap.count === 1 ? "" : "s"}):\n\n${lines}\n\n` +
       `Say 'ship it' when ready.${gitNote}`
     );
   }

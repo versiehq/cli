@@ -24,10 +24,6 @@ vi.mock("../../snapshots/manager.js", () => ({
   createReleaseTag: vi.fn(),
 }));
 
-vi.mock("../../tools/save-my-work.js", () => ({
-  saveMyWork: vi.fn(),
-}));
-
 vi.mock("../../utils/config.js", () => ({
   readConfig: vi.fn(),
   writeConfig: vi.fn(),
@@ -37,7 +33,6 @@ import { git } from "../../git/executor.js";
 import { checkFirstRun, ensureInitialized, getDeployGap, resolveWorkingDir } from "../../git/branches.js";
 import { checkNoWorktrees, classifyPushFailure, checkDeployConfig } from "../../git/safety.js";
 import { createReleaseTag } from "../../snapshots/manager.js";
-import { saveMyWork } from "../../tools/save-my-work.js";
 import { shipIt } from "../../tools/ship-it.js";
 
 const mockGit = vi.mocked(git);
@@ -49,7 +44,6 @@ const mockCheckNoWorktrees = vi.mocked(checkNoWorktrees);
 const mockClassifyPushFailure = vi.mocked(classifyPushFailure);
 const mockCheckDeployConfig = vi.mocked(checkDeployConfig);
 const mockCreateReleaseTag = vi.mocked(createReleaseTag);
-const mockSaveMyWork = vi.mocked(saveMyWork);
 
 function ok(stdout = ""): GitResult {
   return { stdout, stderr: "", exitCode: 0 };
@@ -68,7 +62,6 @@ beforeEach(() => {
   mockEnsureInitialized.mockResolvedValue(CONFIG);
   mockCheckNoWorktrees.mockResolvedValue({ ok: true });
   mockCreateReleaseTag.mockResolvedValue("v1");
-  mockSaveMyWork.mockResolvedValue("Saved!");
   mockClassifyPushFailure.mockResolvedValue(null); // default: unrecognized failure → throw
   mockCheckDeployConfig.mockResolvedValue(null); // default: no deploy config issues
 });
@@ -82,56 +75,67 @@ describe("shipIt", () => {
   });
 
   it("returns 'already up to date' when nothing to deploy", async () => {
-    mockGit.mockResolvedValue(ok("")); // status --porcelain
+    mockGit
+      .mockResolvedValueOnce(ok("")) // status --porcelain
+      .mockResolvedValueOnce(ok("")); // log dev..live (nothing behind either)
     mockGetDeployGap.mockResolvedValue({ count: 0, summaries: [] });
+    // tag --points-at: no checkpoint tag
+    mockGit.mockResolvedValueOnce(ok(""));
     const result = await shipIt({ repo_path: REPO });
     expect(result).toMatch(/already up to date/i);
   });
 
-  it("saves uncommitted work before deploying", async () => {
+  it("notes unsaved changes but does not auto-save", async () => {
     mockGit
-      .mockResolvedValueOnce(ok("M src/foo.ts")) // status
+      .mockResolvedValueOnce(ok("M src/foo.ts")) // status (dirty)
       .mockResolvedValueOnce(ok()) // checkout main
       .mockResolvedValueOnce(ok()) // pull
       .mockResolvedValueOnce(ok()) // merge
       .mockResolvedValueOnce(ok()) // push
-      .mockResolvedValueOnce(ok()); // checkout versie-dev
+      .mockResolvedValueOnce(ok()) // checkout versie-dev
+      .mockResolvedValueOnce(ok()) // merge --ff-only (sync dev with live)
+      .mockResolvedValueOnce(ok()); // push dev
 
     mockGetDeployGap.mockResolvedValue({ count: 2, summaries: ["Add login", "Fix bug"] });
 
-    await shipIt({ repo_path: REPO });
-    expect(mockSaveMyWork).toHaveBeenCalledWith({ repo_path: REPO });
+    const result = await shipIt({ repo_path: REPO });
+    expect(result).toMatch(/Shipped!/i);
+    expect(result).toMatch(/unsaved changes/i);
   });
 
-  it("does not call saveMyWork when working directory is already clean", async () => {
+  it("does not mention unsaved changes when working directory is clean", async () => {
     mockGit
       .mockResolvedValueOnce(ok("")) // status --porcelain (clean)
       .mockResolvedValueOnce(ok()) // checkout main
       .mockResolvedValueOnce(ok()) // pull
       .mockResolvedValueOnce(ok()) // merge
       .mockResolvedValueOnce(ok()) // push
-      .mockResolvedValueOnce(ok()); // checkout versie-dev
+      .mockResolvedValueOnce(ok()) // checkout versie-dev
+      .mockResolvedValueOnce(ok()) // merge --ff-only (sync dev with live)
+      .mockResolvedValueOnce(ok()); // push dev
 
     mockGetDeployGap.mockResolvedValue({ count: 1, summaries: ["Fix bug"] });
 
-    await shipIt({ repo_path: REPO });
-    expect(mockSaveMyWork).not.toHaveBeenCalled();
+    const result = await shipIt({ repo_path: REPO });
+    expect(result).toMatch(/Shipped!/i);
+    expect(result).not.toMatch(/unsaved/i);
   });
 
-  it("returns conflict message and aborts merge on conflict", async () => {
+  it("returns conflict message when merge conflicts with live", async () => {
     mockGit
       .mockResolvedValueOnce(ok("")) // status
       .mockResolvedValueOnce(ok()) // checkout main
       .mockResolvedValueOnce(ok()) // pull
       .mockResolvedValueOnce(fail("Automatic merge failed; fix conflicts")) // merge fails
+      .mockResolvedValueOnce(ok("src/index.ts")) // diff --name-only --diff-filter=U
       .mockResolvedValueOnce(ok()) // merge --abort
       .mockResolvedValueOnce(ok()) // checkout versie-dev
-      .mockResolvedValueOnce(ok("src/index.ts")); // diff --name-only --diff-filter=U
+      .mockResolvedValueOnce(fail("Automatic merge failed")); // merge live INTO dev also conflicts
 
     mockGetDeployGap.mockResolvedValue({ count: 1, summaries: ["Fix bug"] });
 
     const result = await shipIt({ repo_path: REPO });
-    expect(result).toMatch(/paused the release/i);
+    expect(result).toMatch(/both changed/i);
     expect(result).toMatch(/src\/index\.ts/);
     expect(result).toMatch(/ship it/i);
   });
@@ -142,15 +146,15 @@ describe("shipIt", () => {
       .mockResolvedValueOnce(ok()) // checkout main
       .mockResolvedValueOnce(ok()) // pull
       .mockResolvedValueOnce(fail("Automatic merge failed")) // merge fails
+      .mockResolvedValueOnce(ok("conflict.ts")) // diff --name-only
       .mockResolvedValueOnce(ok()) // merge --abort
-      .mockResolvedValueOnce(ok()) // checkout versie-dev  ← happens before diff
-      .mockResolvedValueOnce(ok("conflict.ts")); // diff --name-only
+      .mockResolvedValueOnce(ok()) // checkout versie-dev
+      .mockResolvedValueOnce(fail("conflict")); // merge live INTO dev
 
     mockGetDeployGap.mockResolvedValue({ count: 1, summaries: [] });
 
     await shipIt({ repo_path: REPO });
 
-    // checkout versie-dev is the 6th call (index 5), diff is last — verify checkout happened
     const checkoutCall = mockGit.mock.calls.find(
       (c) => c[0][0] === "checkout" && c[0][1] === "versie-dev"
     );
@@ -164,7 +168,9 @@ describe("shipIt", () => {
       .mockResolvedValueOnce(ok()) // pull
       .mockResolvedValueOnce(ok()) // merge
       .mockResolvedValueOnce(ok()) // push
-      .mockResolvedValueOnce(ok()); // checkout versie-dev
+      .mockResolvedValueOnce(ok()) // checkout versie-dev
+      .mockResolvedValueOnce(ok()) // merge --ff-only (sync dev with live)
+      .mockResolvedValueOnce(ok()); // push dev
 
     mockGetDeployGap.mockResolvedValue({
       count: 2,
@@ -186,14 +192,19 @@ describe("shipIt", () => {
       .mockResolvedValueOnce(ok())
       .mockResolvedValueOnce(ok())
       .mockResolvedValueOnce(ok())
-      .mockResolvedValueOnce(ok());
+      .mockResolvedValueOnce(ok()) // checkout versie-dev
+      .mockResolvedValueOnce(ok()) // merge --ff-only (sync dev with live)
+      .mockResolvedValueOnce(ok()); // push dev
 
     mockGetDeployGap.mockResolvedValue({ count: 1, summaries: ["Fix bug"] });
 
     await shipIt({ repo_path: REPO });
 
-    const lastCall = mockGit.mock.calls.at(-1)?.[0];
-    expect(lastCall).toEqual(["checkout", "versie-dev"]);
+    // Last call is push dev (sync), but checkout versie-dev should still be present
+    const checkoutCall = mockGit.mock.calls.find(
+      (c) => c[0][0] === "checkout" && c[0][1] === "versie-dev"
+    );
+    expect(checkoutCall).toBeDefined();
   });
 
   it("throws and returns to dev when push fails with unrecognized error", async () => {

@@ -9,7 +9,6 @@ vi.mock("../../git/executor.js", () => ({
 vi.mock("../../utils/config.js", () => ({
   readConfig: vi.fn(),
   writeConfig: vi.fn(),
-  resolveRepoPath: (p?: string) => p ?? process.cwd(),
 }));
 
 import { git } from "../../git/executor.js";

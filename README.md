@@ -69,10 +69,12 @@ Versie understands plain English. You don't need to remember exact commands.
 | *"What's not live yet?"* | See what's saved but not yet shipped. |
 | *"Go back to yesterday"* | Restore to any previous version. |
 | *"Go back to the live version"* | Undo everything back to what's live. |
+| *"Go back to my last snapshot"* | Undo a previous restore — brings back your backed-up work. |
 | *"Create a checkpoint called mvp"* | Bookmark this moment by name. |
 | *"Check my project health"* | Full status: saves, ships, any issues. |
 | *"What can Versie do?"* | See all available commands. |
 | *"Help with shipping setup"* | Configure Vercel, Netlify, Railway, or GitHub Actions. |
+| *"Set up Versie and call my workspace 'dev'"* | Use a custom name for your workspace instead of the default `versie-dev`. |
 
 ---
 
@@ -103,9 +105,9 @@ You say "go back to last Tuesday"
 
 | Feature | Free | Pro |
 |---------|------|-----|
-| All 10 operations | ✓ | ✓ |
+| All 12 operations | ✓ | ✓ |
 | Error fixing (15 patterns) | ✓ | ✓ |
-| Named checkpoints | 5 | Unlimited |
+| Named checkpoints | Unlimited | Unlimited |
 | Works across sessions | ✓ | ✓ |
 | Visual timeline + one-click deploy | — | ✓ |
 

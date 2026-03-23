@@ -19,12 +19,12 @@ export async function git(args: string[], cwd: string): Promise<GitResult> {
       maxBuffer: 10 * 1024 * 1024,
       env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
     });
-    return { stdout: stdout.trim(), stderr: stderr.trim(), exitCode: 0 };
+    return { stdout: stdout.replace(/\r\n/g, "\n").trimEnd(), stderr: stderr.replace(/\r\n/g, "\n").trimEnd(), exitCode: 0 };
   } catch (err: unknown) {
     const e = err as NodeJS.ErrnoException & { stdout?: string; stderr?: string; code?: number };
     return {
-      stdout: (e.stdout ?? "").trim(),
-      stderr: (e.stderr ?? "").trim(),
+      stdout: (e.stdout ?? "").replace(/\r\n/g, "\n").trimEnd(),
+      stderr: (e.stderr ?? "").replace(/\r\n/g, "\n").trimEnd(),
       exitCode: typeof e.code === "number" ? e.code : 1,
     };
   }

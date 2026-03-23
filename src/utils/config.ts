@@ -5,7 +5,6 @@ export interface VersieConfig {
   liveBranch: string;
   devBranch: string;
   releases?: string[];       // versie-created release tags e.g. ["v1", "v2", "v3"]
-  verbose?: boolean;        // default false — brief output; set true for detailed output
   showGitCommands?: boolean; // default false — append underlying git commands to output
 }
 
@@ -26,8 +25,4 @@ export function writeConfig(repoPath: string, config: VersieConfig): void {
   const configDir = join(repoPath, CONFIG_DIR);
   mkdirSync(configDir, { recursive: true });
   writeFileSync(join(configDir, CONFIG_FILE), JSON.stringify(config, null, 2), "utf-8");
-}
-
-export function resolveRepoPath(repoPath?: string): string {
-  return repoPath ?? process.cwd();
 }

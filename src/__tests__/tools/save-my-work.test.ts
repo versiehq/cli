@@ -65,7 +65,6 @@ describe("saveMyWork", () => {
     mockGit
       .mockResolvedValueOnce(ok("M src/index.ts\nM src/app.ts")) // status
       .mockResolvedValueOnce(ok()) // add -A
-      .mockResolvedValueOnce(ok("src/index.ts | 5 ++\nsrc/app.ts | 3 --")) // diff --cached --stat
       .mockResolvedValueOnce(ok()) // commit
       .mockResolvedValueOnce(ok()); // push
 
@@ -78,7 +77,7 @@ describe("saveMyWork", () => {
     mockGit
       .mockResolvedValueOnce(ok("M src/index.ts")) // status
       .mockResolvedValueOnce(ok()) // add -A
-      .mockResolvedValueOnce(ok()) // commit (no diff stat needed)
+      .mockResolvedValueOnce(ok()) // commit
       .mockResolvedValueOnce(ok()); // push
 
     await saveMyWork({ repo_path: REPO, description: "My custom message" });
@@ -87,11 +86,10 @@ describe("saveMyWork", () => {
     expect(commitCall?.[0]).toContain("My custom message");
   });
 
-  it("generates a message from diff stat when no description provided", async () => {
+  it("generates a message from porcelain status when no description provided", async () => {
     mockGit
       .mockResolvedValueOnce(ok("M src/index.ts")) // status
       .mockResolvedValueOnce(ok()) // add -A
-      .mockResolvedValueOnce(ok(" src/index.ts | 5 +++--")) // diff --cached --stat
       .mockResolvedValueOnce(ok()) // commit
       .mockResolvedValueOnce(ok()); // push
 
@@ -103,7 +101,6 @@ describe("saveMyWork", () => {
     mockGit
       .mockResolvedValueOnce(ok("M src/foo.ts"))
       .mockResolvedValueOnce(ok())
-      .mockResolvedValueOnce(ok("src/foo.ts | 1 +"))
       .mockResolvedValueOnce(ok())
       .mockResolvedValueOnce(ok());
 
@@ -116,7 +113,6 @@ describe("saveMyWork", () => {
     mockGit
       .mockResolvedValueOnce(ok("M src/foo.ts"))
       .mockResolvedValueOnce(ok())
-      .mockResolvedValueOnce(ok("src/foo.ts | 1 +"))
       .mockResolvedValueOnce(ok())
       .mockResolvedValueOnce(ok());
 
@@ -130,7 +126,6 @@ describe("saveMyWork", () => {
     mockGit
       .mockResolvedValueOnce(ok("M src/foo.ts"))
       .mockResolvedValueOnce(ok())
-      .mockResolvedValueOnce(ok("src/foo.ts | 1 +"))
       .mockResolvedValueOnce(ok())
       .mockResolvedValueOnce(ok());
 
@@ -142,7 +137,6 @@ describe("saveMyWork", () => {
     mockGit
       .mockResolvedValueOnce(ok("M src/foo.ts")) // status
       .mockResolvedValueOnce(ok()) // add -A
-      .mockResolvedValueOnce(ok("src/foo.ts | 1 +")) // diff stat
       .mockResolvedValueOnce(ok()) // commit
       .mockResolvedValueOnce(fail("rejected")) // push fails
       .mockResolvedValueOnce(ok()) // pull --rebase
@@ -158,7 +152,6 @@ describe("saveMyWork", () => {
     mockGit
       .mockResolvedValueOnce(ok("M src/foo.ts"))
       .mockResolvedValueOnce(ok())
-      .mockResolvedValueOnce(ok("src/foo.ts | 1 +"))
       .mockResolvedValueOnce(ok())
       .mockResolvedValueOnce(fail("rejected")) // push fails
       .mockResolvedValueOnce(ok()) // pull --rebase
@@ -173,7 +166,6 @@ describe("saveMyWork", () => {
     mockGit
       .mockResolvedValueOnce(ok("M src/foo.ts"))
       .mockResolvedValueOnce(ok())
-      .mockResolvedValueOnce(ok("src/foo.ts | 1 +"))
       .mockResolvedValueOnce(ok())
       .mockResolvedValueOnce(fail("Repository not found")); // push fails
 
@@ -190,7 +182,6 @@ describe("saveMyWork", () => {
     mockGit
       .mockResolvedValueOnce(ok("M src/foo.ts"))
       .mockResolvedValueOnce(ok())
-      .mockResolvedValueOnce(ok("src/foo.ts | 1 +"))
       .mockResolvedValueOnce(ok())
       .mockResolvedValueOnce(fail("Permission denied (publickey)")); // push fails
 
@@ -207,7 +198,6 @@ describe("saveMyWork", () => {
     mockGit
       .mockResolvedValueOnce(ok("M src/foo.ts"))
       .mockResolvedValueOnce(ok())
-      .mockResolvedValueOnce(ok("src/foo.ts | 1 +"))
       .mockResolvedValueOnce(ok())
       .mockResolvedValueOnce(fail("could not read Username")); // push fails
 
@@ -224,7 +214,6 @@ describe("saveMyWork", () => {
     mockGit
       .mockResolvedValueOnce(ok("M src/foo.ts"))
       .mockResolvedValueOnce(ok())
-      .mockResolvedValueOnce(ok("src/foo.ts | 1 +"))
       .mockResolvedValueOnce(fail("nothing to commit")); // commit fails
 
     await expect(saveMyWork({ repo_path: REPO })).rejects.toThrow(/Save failed/i);

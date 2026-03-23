@@ -85,11 +85,11 @@ export const PATTERNS: ErrorPattern[] = [
   },
   {
     id: "divergent-branches",
-    match: /Need to specify how to reconcile divergent branches/i,
+    match: /Need to specify how to reconcile divergent branches|Your branch and '.*' have diverged/i,
     explanation: "Your project and GitHub got out of sync. Aligning them now.",
     fix: [
-      ["config", "pull.rebase", "false"],
-      ["pull"],
+      ["pull", "--rebase", "origin", "{devBranch}"],
+      ["push", "origin", "{devBranch}"],
     ],
     snapshotFirst: false,
     successMessage: "Synced. Try your action again.",
@@ -153,15 +153,16 @@ export const PATTERNS: ErrorPattern[] = [
     match: /Automatic merge failed; fix conflicts/i,
     explanation:
       "Your work and the live version both changed the same file. " +
-      "I've paused the deploy. Look for conflict markers (<<<<<<, =======, >>>>>>>) in the files, " +
-      "pick which version to keep, then say 'ship it' to try again.",
+      "I've paused the deploy and pulled in the live changes so you can see both versions.",
     fix: [
       ["merge", "--abort"],
       ["checkout", "{devBranch}"],
+      ["merge", "{liveBranch}", "--no-edit"],
     ],
     snapshotFirst: true,
     requiresUserInput: true,
-    successMessage: "Paused the deploy. Fix the conflicts, then say 'ship it' again.",
+    stopOnError: false,
+    successMessage: "Both versions are now in the file — look for the <<<<<<< and >>>>>>> markers, pick which lines to keep, then say 'save my work' and 'ship it' again.",
   },
   {
     id: "email-privacy",
