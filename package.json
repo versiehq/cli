@@ -1,6 +1,6 @@
 {
   "name": "versie-mcp",
-  "version": "1.1.0",
+  "version": "1.2.0-rc.1",
   "description": "Git made invisible for vibe coders — MCP server",
   "type": "module",
   "bin": {
