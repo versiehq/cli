@@ -94,7 +94,8 @@ describe("shipIt", () => {
       .mockResolvedValueOnce(ok()) // push
       .mockResolvedValueOnce(ok()) // checkout versie-dev
       .mockResolvedValueOnce(ok()) // merge --ff-only (sync dev with live)
-      .mockResolvedValueOnce(ok()); // push dev
+      .mockResolvedValueOnce(ok()) // push dev
+      .mockResolvedValueOnce(ok("abc1234")); // rev-parse (cloud sync)
 
     mockGetDeployGap.mockResolvedValue({ count: 2, summaries: ["Add login", "Fix bug"] });
 
@@ -112,7 +113,8 @@ describe("shipIt", () => {
       .mockResolvedValueOnce(ok()) // push
       .mockResolvedValueOnce(ok()) // checkout versie-dev
       .mockResolvedValueOnce(ok()) // merge --ff-only (sync dev with live)
-      .mockResolvedValueOnce(ok()); // push dev
+      .mockResolvedValueOnce(ok()) // push dev
+      .mockResolvedValueOnce(ok("abc1234")); // rev-parse (cloud sync)
 
     mockGetDeployGap.mockResolvedValue({ count: 1, summaries: ["Fix bug"] });
 
@@ -170,7 +172,8 @@ describe("shipIt", () => {
       .mockResolvedValueOnce(ok()) // push
       .mockResolvedValueOnce(ok()) // checkout versie-dev
       .mockResolvedValueOnce(ok()) // merge --ff-only (sync dev with live)
-      .mockResolvedValueOnce(ok()); // push dev
+      .mockResolvedValueOnce(ok()) // push dev
+      .mockResolvedValueOnce(ok("abc1234")); // rev-parse (cloud sync)
 
     mockGetDeployGap.mockResolvedValue({
       count: 2,
@@ -194,7 +197,8 @@ describe("shipIt", () => {
       .mockResolvedValueOnce(ok())
       .mockResolvedValueOnce(ok()) // checkout versie-dev
       .mockResolvedValueOnce(ok()) // merge --ff-only (sync dev with live)
-      .mockResolvedValueOnce(ok()); // push dev
+      .mockResolvedValueOnce(ok()) // push dev
+      .mockResolvedValueOnce(ok("abc1234")); // rev-parse (cloud sync)
 
     mockGetDeployGap.mockResolvedValue({ count: 1, summaries: ["Fix bug"] });
 

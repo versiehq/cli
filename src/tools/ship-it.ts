@@ -4,6 +4,7 @@ import { checkFirstRun, ensureInitialized, getDeployGap, resolveWorkingDir } fro
 import { checkNoWorktrees, classifyPushFailure, checkDeployConfig } from "../git/safety.js";
 import { createReleaseTag } from "../snapshots/manager.js";
 import { track } from "../sync/telemetry.js";
+import { syncEvent } from "../sync/cloud.js";
 
 export const shipItSchema = {
   description:
@@ -158,6 +159,14 @@ export async function shipIt(args: z.infer<typeof shipItSchema.inputSchema>): Pr
       : "";
 
     track("ship_it", { type: "rollback" });
+    const rbHashResult = await git(["rev-parse", config.liveBranch], repoPath);
+    syncEvent(repoPath, {
+      type: "rollback",
+      timestamp: new Date().toISOString(),
+      commit_hash: rbHashResult.stdout.trim(),
+      message: `Rolled back to ${rollbackLabel}`,
+      metadata: { release_tag: rbReleaseTag, rollback_label: rollbackLabel },
+    });
     return `Rolled back! Your live app now matches "${rollbackLabel}". (${rbReleaseTag})${rbGitNote}`;
   }
 
@@ -261,5 +270,14 @@ export async function shipIt(args: z.infer<typeof shipItSchema.inputSchema>): Pr
 
   const summary = gap.summaries.length > 0 ? ` — ${gap.summaries.slice(0, 2).join(", ")}${gap.summaries.length > 2 ? "…" : ""}` : "";
   track("ship_it", { type: "forward", changes: gap.count });
+  const deployHashResult = await git(["rev-parse", config.liveBranch], repoPath);
+  syncEvent(repoPath, {
+    type: "deploy",
+    timestamp: new Date().toISOString(),
+    commit_hash: deployHashResult.stdout.trim(),
+    message: gap.summaries.length > 0 ? gap.summaries.slice(0, 2).join(", ") : `Shipped ${changeCount}`,
+    files_changed: gap.count,
+    metadata: { release_tag: releaseTag, change_count: gap.count },
+  });
   return `Shipped! ${changeCount} live${summary}. (${releaseTag})${gitNote}${unsavedNote}`;
 }

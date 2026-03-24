@@ -3,6 +3,7 @@ import { git } from "../git/executor.js";
 import { checkFirstRun, ensureOnDev, getDeployGap, resolveWorkingDir, isClaudeWorktree } from "../git/branches.js";
 import { classifyPushFailure } from "../git/safety.js";
 import { track } from "../sync/telemetry.js";
+import { syncEvent } from "../sync/cloud.js";
 
 export const saveMyWorkSchema = {
   description:
@@ -80,6 +81,14 @@ export async function saveMyWork(args: z.infer<typeof saveMyWorkSchema.inputSche
     ? `\n\`\`\`\ngit add -A\ngit commit -m "${message}"\ngit push origin ${config.devBranch}\n\`\`\``
     : "";
   track("save_my_work");
+  const hashResult = await git(["rev-parse", "HEAD"], repoPath);
+  syncEvent(repoPath, {
+    type: "save",
+    timestamp: new Date().toISOString(),
+    commit_hash: hashResult.stdout.trim(),
+    message,
+    files_changed: statusResult.stdout.split("\n").filter(Boolean).length,
+  });
   return `Saved! ${message}. (Your live app wasn't affected.)${gapNote}${worktreeNote}${gitNote}`;
 }
 

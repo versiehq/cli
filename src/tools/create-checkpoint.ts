@@ -3,6 +3,7 @@ import { git } from "../git/executor.js";
 import { checkFirstRun, ensureOnDev, resolveWorkingDir } from "../git/branches.js";
 import { createCheckpoint } from "../snapshots/manager.js";
 import { track } from "../sync/telemetry.js";
+import { syncEvent } from "../sync/cloud.js";
 
 export const createCheckpointSchema = {
   description:
@@ -38,5 +39,13 @@ export async function createCheckpointTool(args: z.infer<typeof createCheckpoint
 
   const gitNote = config.showGitCommands ? `\n\`\`\`\ngit tag -a "${result.tagName}" -m "${args.name}"\ngit push origin "${result.tagName}"\n\`\`\`` : "";
   track("create_checkpoint");
+  const hashResult = await git(["rev-parse", "HEAD"], repoPath);
+  syncEvent(repoPath, {
+    type: "checkpoint",
+    timestamp: new Date().toISOString(),
+    commit_hash: hashResult.stdout.trim(),
+    message: args.name,
+    metadata: { tag: result.tagName },
+  });
   return `Checkpoint '${args.name}' saved — you can always return to this point.${gitNote}`;
 }
