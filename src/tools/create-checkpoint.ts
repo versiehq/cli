@@ -2,6 +2,7 @@ import { z } from "zod/v4";
 import { git } from "../git/executor.js";
 import { checkFirstRun, ensureOnDev, resolveWorkingDir } from "../git/branches.js";
 import { createCheckpoint } from "../snapshots/manager.js";
+import { track } from "../sync/telemetry.js";
 
 export const createCheckpointSchema = {
   description:
@@ -36,5 +37,6 @@ export async function createCheckpointTool(args: z.infer<typeof createCheckpoint
   const result = await createCheckpoint(repoPath, args.name);
 
   const gitNote = config.showGitCommands ? `\n\`\`\`\ngit tag -a "${result.tagName}" -m "${args.name}"\ngit push origin "${result.tagName}"\n\`\`\`` : "";
+  track("create_checkpoint");
   return `Checkpoint '${args.name}' saved — you can always return to this point.${gitNote}`;
 }

@@ -2,6 +2,7 @@ import { z } from "zod/v4";
 import { git } from "../git/executor.js";
 import { checkFirstRun, ensureOnDev, getDeployGap, resolveWorkingDir, isClaudeWorktree } from "../git/branches.js";
 import { classifyPushFailure } from "../git/safety.js";
+import { track } from "../sync/telemetry.js";
 
 export const saveMyWorkSchema = {
   description:
@@ -78,6 +79,7 @@ export async function saveMyWork(args: z.infer<typeof saveMyWorkSchema.inputSche
   const gitNote = config.showGitCommands
     ? `\n\`\`\`\ngit add -A\ngit commit -m "${message}"\ngit push origin ${config.devBranch}\n\`\`\``
     : "";
+  track("save_my_work");
   return `Saved! ${message}. (Your live app wasn't affected.)${gapNote}${worktreeNote}${gitNote}`;
 }
 

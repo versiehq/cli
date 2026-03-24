@@ -2,6 +2,7 @@ import { z } from "zod/v4";
 import { git } from "../git/executor.js";
 import { checkFirstRun, ensureInitialized, resolveWorkingDir } from "../git/branches.js";
 import { createAutoSnapshot, findCheckpoint, findRelease } from "../snapshots/manager.js";
+import { track } from "../sync/telemetry.js";
 
 export const goBackToSchema = {
   description:
@@ -65,6 +66,7 @@ export async function goBackTo(args: z.infer<typeof goBackToSchema.inputSchema>)
     await git(["reset", "--hard", latestSnapshot], repoPath);
     await git(["push", "--force-with-lease", "origin", config.devBranch], repoPath);
     const gitNote = config.showGitCommands ? `\n\`\`\`\ngit reset --hard ${latestSnapshot}\ngit push --force-with-lease origin ${config.devBranch}\n\`\`\`` : "";
+    track("go_back_to", { target: "snapshot" });
     return `Restored to your backed-up work. Your live app wasn't affected — only your workspace was updated.${gitNote}`;
   }
 
@@ -97,6 +99,7 @@ export async function goBackTo(args: z.infer<typeof goBackToSchema.inputSchema>)
 
     const name = checkpoint.replace("checkpoint/", "");
     const gitNote = config.showGitCommands ? `\n\`\`\`\ngit reset --hard ${checkpoint}\ngit push --force-with-lease origin ${config.devBranch}\n\`\`\`` : "";
+    track("go_back_to", { target: "checkpoint" });
     return (
       `Restored to checkpoint '${name}'.\n` +
       `Your live app wasn't affected — only your workspace was updated.` +
@@ -117,6 +120,7 @@ export async function goBackTo(args: z.infer<typeof goBackToSchema.inputSchema>)
     }
 
     const gitNote = config.showGitCommands ? `\n\`\`\`\ngit reset --hard ${config.liveBranch}\ngit push --force-with-lease origin ${config.devBranch}\n\`\`\`` : "";
+    track("go_back_to", { target: "live" });
     return (
       `Restored to the live version. Your workspace now matches what's live.` +
       `${backupNote}${gitNote}`
@@ -131,6 +135,7 @@ export async function goBackTo(args: z.infer<typeof goBackToSchema.inputSchema>)
     await git(["push", "--force-with-lease", "origin", config.devBranch], repoPath);
 
     const gitNote = config.showGitCommands ? `\n\`\`\`\ngit reset --hard ${releaseTag}\ngit push --force-with-lease origin ${config.devBranch}\n\`\`\`` : "";
+    track("go_back_to", { target: "release" });
     return (
       `Restored to ${releaseTag} — your workspace now matches that shipped version.\n` +
       `Your live app wasn't affected — only your workspace was updated.` +
@@ -171,6 +176,7 @@ export async function goBackTo(args: z.infer<typeof goBackToSchema.inputSchema>)
     await git(["push", "--force-with-lease", "origin", config.devBranch], repoPath);
 
     const gitNote = config.showGitCommands ? `\n\`\`\`\ngit reset --hard ${match.hash}\ngit push --force-with-lease origin ${config.devBranch}\n\`\`\`` : "";
+    track("go_back_to", { target: "commit" });
     return (
       `Restored to '${match.message}' (${match.relDate}).\n` +
       `Your live app wasn't affected — only your workspace was updated.` +

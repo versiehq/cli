@@ -3,6 +3,7 @@ import { git } from "../git/executor.js";
 import { checkFirstRun, ensureInitialized, getDeployGap, resolveWorkingDir } from "../git/branches.js";
 import { checkNoWorktrees, classifyPushFailure, checkDeployConfig } from "../git/safety.js";
 import { createReleaseTag } from "../snapshots/manager.js";
+import { track } from "../sync/telemetry.js";
 
 export const shipItSchema = {
   description:
@@ -156,6 +157,7 @@ export async function shipIt(args: z.infer<typeof shipItSchema.inputSchema>): Pr
       ? `\n\`\`\`\ngit checkout ${config.liveBranch}\ngit pull\ngit revert HEAD~${hashes.length}..HEAD --no-commit\ngit commit -m "Rolled back to ${rollbackLabel}"\ngit push origin ${config.liveBranch}\ngit tag -a ${rbReleaseTag} -m "${rbReleaseTag}"\n\`\`\``
       : "";
 
+    track("ship_it", { type: "rollback" });
     return `Rolled back! Your live app now matches "${rollbackLabel}". (${rbReleaseTag})${rbGitNote}`;
   }
 
@@ -258,5 +260,6 @@ export async function shipIt(args: z.infer<typeof shipItSchema.inputSchema>): Pr
     : "";
 
   const summary = gap.summaries.length > 0 ? ` — ${gap.summaries.slice(0, 2).join(", ")}${gap.summaries.length > 2 ? "…" : ""}` : "";
+  track("ship_it", { type: "forward", changes: gap.count });
   return `Shipped! ${changeCount} live${summary}. (${releaseTag})${gitNote}${unsavedNote}`;
 }

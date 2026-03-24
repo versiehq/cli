@@ -5,6 +5,7 @@ import { promisify } from "node:util";
 import { git } from "./executor.js";
 import { readConfig, writeConfig, type VersieConfig } from "../utils/config.js";
 import { logger } from "../utils/logger.js";
+import { track } from "../sync/telemetry.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -59,6 +60,7 @@ export async function runSetupFlow(repoPath: string, githubUrl?: string, devBran
         );
       }
       await ensureInitialized(repoPath, devBranchName);
+      track("first_run");
       return SETUP_COMPLETE_MESSAGE;
     }
 
@@ -112,6 +114,7 @@ export async function runSetupFlow(repoPath: string, githubUrl?: string, devBran
         );
       }
       await ensureInitialized(repoPath, devBranchName);
+      track("first_run");
       return SETUP_COMPLETE_MESSAGE;
     }
 
