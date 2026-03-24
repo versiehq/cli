@@ -54,7 +54,8 @@ export async function listCommands(args: z.infer<typeof listCommandsSchema.input
     `- \`help with shipping setup\` — Configure Vercel/Netlify/Railway to only go live when you ship\n\n` +
     `**Pro dashboard** (versie.co)\n` +
     `- \`connect versie to my dashboard, my key is [key]\` — Link this project to your Versie dashboard\n` +
-    `- \`disconnect versie from the dashboard\` — Remove the dashboard connection\n\n` +
+    `- \`disconnect versie from the dashboard\` — Remove the dashboard connection\n` +
+    `- \`turn off telemetry\` — Opt out of anonymous usage data collection\n\n` +
     `Something broken? support@versie.co`
   );
 }

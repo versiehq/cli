@@ -158,7 +158,7 @@ export async function shipIt(args: z.infer<typeof shipItSchema.inputSchema>): Pr
       ? `\n\`\`\`\ngit checkout ${config.liveBranch}\ngit pull\ngit revert HEAD~${hashes.length}..HEAD --no-commit\ngit commit -m "Rolled back to ${rollbackLabel}"\ngit push origin ${config.liveBranch}\ngit tag -a ${rbReleaseTag} -m "${rbReleaseTag}"\n\`\`\``
       : "";
 
-    track("ship_it", { type: "rollback" });
+    track("ship_it", { type: "rollback" }, config);
     const rbHashResult = await git(["rev-parse", config.liveBranch], repoPath);
     syncEvent(repoPath, {
       type: "rollback",
@@ -269,7 +269,7 @@ export async function shipIt(args: z.infer<typeof shipItSchema.inputSchema>): Pr
     : "";
 
   const summary = gap.summaries.length > 0 ? ` — ${gap.summaries.slice(0, 2).join(", ")}${gap.summaries.length > 2 ? "…" : ""}` : "";
-  track("ship_it", { type: "forward", changes: gap.count });
+  track("ship_it", { type: "forward", changes: gap.count }, config);
   const deployHashResult = await git(["rev-parse", config.liveBranch], repoPath);
   syncEvent(repoPath, {
     type: "deploy",

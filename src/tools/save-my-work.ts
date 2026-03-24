@@ -80,7 +80,7 @@ export async function saveMyWork(args: z.infer<typeof saveMyWorkSchema.inputSche
   const gitNote = config.showGitCommands
     ? `\n\`\`\`\ngit add -A\ngit commit -m "${message}"\ngit push origin ${config.devBranch}\n\`\`\``
     : "";
-  track("save_my_work");
+  track("save_my_work", {}, config);
   const hashResult = await git(["rev-parse", "HEAD"], repoPath);
   syncEvent(repoPath, {
     type: "save",

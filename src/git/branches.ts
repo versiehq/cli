@@ -14,7 +14,8 @@ const SETUP_COMPLETE_MESSAGE =
   `Versie is set up! Your work saves safely here — your live app only changes when you say "ship it." Save freely.\n\n` +
   `Say **"save my work"** to save, **"ship it"** to go live, or **"list commands"** to see all options.\n\n` +
   `Before your first ship: if you have your GitHub repo connected to Vercel, Netlify, or another platform, ` +
-  `say **"help with shipping setup"** so only "ship it" triggers live deployments — not every save.`;
+  `say **"help with shipping setup"** so only "ship it" triggers live deployments — not every save.\n\n` +
+  `Versie collects anonymous usage data to help improve error detection. Say **"turn off telemetry"** anytime to opt out.`;
 
 /**
  * Lightweight guard called at the top of every tool except check_health.

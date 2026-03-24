@@ -5,7 +5,8 @@ import { readConfig, writeConfig } from "../utils/config.js";
 export const configureSettingsSchema = {
   description:
     "Fallback for toggling Versie settings, or for connecting Versie to the dashboard with an API key. " +
-    "Use when the user says 'connect versie to my dashboard', 'my versie key is...', or 'disconnect from dashboard'. " +
+    "Use when the user says 'connect versie to my dashboard', 'my versie key is...', 'disconnect from dashboard', " +
+    "'turn off telemetry', or 'opt out of telemetry'. " +
     "For 'show/hide git commands', prefer check_health with show_git_commands param instead.",
   inputSchema: z.object({
     show_git_commands: z
@@ -17,6 +18,10 @@ export const configureSettingsSchema = {
       .max(200)
       .optional()
       .describe("Versie Pro API key from versie.co/settings. Set to 'disconnect' to remove the key and disable cloud sync."),
+    telemetry: z
+      .enum(["on", "off"])
+      .optional()
+      .describe("Set to 'off' to opt out of anonymous telemetry, 'on' to opt back in."),
     repo_path: z
       .string()
       .optional()
@@ -42,6 +47,13 @@ export async function configureSettings(args: z.infer<typeof configureSettingsSc
     return "Connected! Your saves, ships, and checkpoints will now sync to the Versie dashboard.";
   }
 
+  if (args.telemetry !== undefined) {
+    writeConfig(repoPath, { ...config, telemetry: args.telemetry === "on" });
+    return args.telemetry === "on"
+      ? "Telemetry on — anonymous usage data will be collected to help improve Versie."
+      : "Telemetry off — no usage data will be collected from this project.";
+  }
+
   if (args.show_git_commands !== undefined) {
     writeConfig(repoPath, { ...config, showGitCommands: args.show_git_commands === "on" });
     return args.show_git_commands === "on"
@@ -49,5 +61,9 @@ export async function configureSettings(args: z.infer<typeof configureSettingsSc
       : "Git commands off — tools will show plain output again.";
   }
 
-  return `Show git commands: ${config.showGitCommands ? "on" : "off"}${config.apiKey ? "\nDashboard: connected" : ""}`;
+  return (
+    `Show git commands: ${config.showGitCommands ? "on" : "off"}\n` +
+    `Telemetry: ${config.telemetry === false ? "off" : "on"}\n` +
+    `Dashboard: ${config.apiKey ? "connected" : "not connected"}`
+  );
 }

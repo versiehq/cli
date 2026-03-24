@@ -37,7 +37,7 @@ export async function fixThisError(args: z.infer<typeof fixThisErrorSchema.input
       fix_attempted: false,
       fix_succeeded: null,
       error_text: errorText.slice(0, 1000),
-    });
+    }, config);
     return (
       `I don't recognize that error yet.\n\n` +
       `Error text:\n${errorText}\n\n` +
@@ -82,7 +82,7 @@ export async function fixThisError(args: z.infer<typeof fixThisErrorSchema.input
       fix_attempted: true,
       fix_succeeded: false,
       error_text: errorText.slice(0, 1000),
-    });
+    }, config);
     return (
       `${pattern.explanation}\n\n` +
       `I tried to fix it automatically but ran into another issue:\n${failed.stderr}\n\n` +
@@ -95,6 +95,6 @@ export async function fixThisError(args: z.infer<typeof fixThisErrorSchema.input
     fix_attempted: true,
     fix_succeeded: true,
     error_text: errorText.slice(0, 1000),
-  });
+  }, config);
   return `${pattern.explanation}\n\n${pattern.successMessage ?? "Fixed! Try what you were doing again."}`;
 }

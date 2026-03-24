@@ -6,6 +6,7 @@ export interface VersieConfig {
   devBranch: string;
   releases?: string[];       // versie-created release tags e.g. ["v1", "v2", "v3"]
   showGitCommands?: boolean; // default false — append underlying git commands to output
+  telemetry?: boolean;       // default true — set to false to opt out of anonymous telemetry
   apiKey?: string;           // Versie Pro API key — written by configure_settings, enables cloud sync
   apiUrl?: string;           // Versie API URL — defaults to https://versie.co/api if apiKey is set
 }

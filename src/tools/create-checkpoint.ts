@@ -38,7 +38,7 @@ export async function createCheckpointTool(args: z.infer<typeof createCheckpoint
   const result = await createCheckpoint(repoPath, args.name);
 
   const gitNote = config.showGitCommands ? `\n\`\`\`\ngit tag -a "${result.tagName}" -m "${args.name}"\ngit push origin "${result.tagName}"\n\`\`\`` : "";
-  track("create_checkpoint");
+  track("create_checkpoint", {}, config);
   const hashResult = await git(["rev-parse", "HEAD"], repoPath);
   syncEvent(repoPath, {
     type: "checkpoint",

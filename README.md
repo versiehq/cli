@@ -101,6 +101,14 @@ You say "go back to last Tuesday"
 
 ---
 
+## Privacy & telemetry
+
+Versie collects anonymous usage data by default — which tools you use and whether error fixes succeed. No personal information, no file contents, no repo names. This data is used to improve error detection patterns.
+
+To opt out, say: **"turn off telemetry"** in your AI tool. Versie stores the preference in your project.
+
+---
+
 ## Connecting to the Versie dashboard (Pro)
 
 If you have a Versie Pro account, you can connect the MCP server to your dashboard so your saves, ships, and checkpoints appear in the visual timeline.

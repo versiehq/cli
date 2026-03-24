@@ -1,4 +1,5 @@
 import { PostHog } from "posthog-node";
+import type { VersieConfig } from "../utils/config.js";
 
 export type TelemetryEvent =
   | "save_my_work"
@@ -29,7 +30,9 @@ function getClient(): PostHog | null {
   return _client;
 }
 
-export function track(event: TelemetryEvent, props?: Record<string, unknown>): void {
+export function track(event: TelemetryEvent, props?: Record<string, unknown>, config?: VersieConfig): void {
+  // Config opt-out takes priority; env var opt-out handled in getClient()
+  if (config?.telemetry === false) return;
   const client = getClient();
   if (!client) return;
   try {
