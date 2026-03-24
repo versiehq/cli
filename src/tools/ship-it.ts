@@ -166,7 +166,7 @@ export async function shipIt(args: z.infer<typeof shipItSchema.inputSchema>): Pr
       commit_hash: rbHashResult.stdout.trim(),
       message: `Rolled back to ${rollbackLabel}`,
       metadata: { release_tag: rbReleaseTag, rollback_label: rollbackLabel },
-    });
+    }, config);
     return `Rolled back! Your live app now matches "${rollbackLabel}". (${rbReleaseTag})${rbGitNote}`;
   }
 
@@ -278,6 +278,6 @@ export async function shipIt(args: z.infer<typeof shipItSchema.inputSchema>): Pr
     message: gap.summaries.length > 0 ? gap.summaries.slice(0, 2).join(", ") : `Shipped ${changeCount}`,
     files_changed: gap.count,
     metadata: { release_tag: releaseTag, change_count: gap.count },
-  });
+  }, config);
   return `Shipped! ${changeCount} live${summary}. (${releaseTag})${gitNote}${unsavedNote}`;
 }

@@ -6,9 +6,9 @@
 
 import { createHash } from "node:crypto";
 import { git } from "../git/executor.js";
+import type { VersieConfig } from "../utils/config.js";
 
-const API_URL = process.env.VERSIE_API_URL;
-const API_KEY = process.env.VERSIE_API_KEY;
+const DEFAULT_API_URL = "https://versie.co/api";
 const TIMEOUT_MS = 5_000;
 
 export type CloudEventType = "save" | "deploy" | "rollback" | "checkpoint" | "error" | "health_check";
@@ -25,10 +25,15 @@ export interface CloudEvent {
 /**
  * Send a single event to the cloud sync endpoint.
  * Resolves the repo's remote URL to derive repo_hash and repo_name.
- * No-ops silently if API_URL/API_KEY are not configured.
+ * No-ops silently if no API key is configured.
+ *
+ * Auth priority: config.apiKey → VERSIE_API_KEY env var
+ * URL priority:  config.apiUrl → VERSIE_API_URL env var → DEFAULT_API_URL
  */
-export async function syncEvent(repoPath: string, event: CloudEvent): Promise<void> {
-  if (!API_URL || !API_KEY) return;
+export async function syncEvent(repoPath: string, event: CloudEvent, config?: VersieConfig): Promise<void> {
+  const apiKey = config?.apiKey ?? process.env.VERSIE_API_KEY;
+  if (!apiKey) return;
+  const apiUrl = config?.apiUrl ?? process.env.VERSIE_API_URL ?? DEFAULT_API_URL;
 
   try {
     // Resolve remote URL for project identity
@@ -45,11 +50,11 @@ export async function syncEvent(repoPath: string, event: CloudEvent): Promise<vo
     const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
     try {
-      await fetch(`${API_URL}/functions/v1/sync-event`, {
+      await fetch(`${apiUrl}/functions/v1/sync-event`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${API_KEY}`,
+          "Authorization": `Bearer ${apiKey}`,
         },
         body,
         signal: controller.signal,

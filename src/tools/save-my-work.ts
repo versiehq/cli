@@ -88,7 +88,7 @@ export async function saveMyWork(args: z.infer<typeof saveMyWorkSchema.inputSche
     commit_hash: hashResult.stdout.trim(),
     message,
     files_changed: statusResult.stdout.split("\n").filter(Boolean).length,
-  });
+  }, config);
   return `Saved! ${message}. (Your live app wasn't affected.)${gapNote}${worktreeNote}${gitNote}`;
 }
 

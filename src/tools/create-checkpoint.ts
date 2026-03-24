@@ -46,6 +46,6 @@ export async function createCheckpointTool(args: z.infer<typeof createCheckpoint
     commit_hash: hashResult.stdout.trim(),
     message: args.name,
     metadata: { tag: result.tagName },
-  });
+  }, config);
   return `Checkpoint '${args.name}' saved — you can always return to this point.${gitNote}`;
 }

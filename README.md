@@ -101,6 +101,20 @@ You say "go back to last Tuesday"
 
 ---
 
+## Connecting to the Versie dashboard (Pro)
+
+If you have a Versie Pro account, you can connect the MCP server to your dashboard so your saves, ships, and checkpoints appear in the visual timeline.
+
+1. Sign in at [versie.co](https://versie.co) with GitHub
+2. Go to **Settings → API key** and copy your key
+3. In your AI tool, say: **"Connect Versie to my dashboard, my key is [your key]"**
+
+That's it. No config files to edit, no environment variables. Versie stores the key in your project and cloud sync activates immediately.
+
+To disconnect: say **"Disconnect Versie from the dashboard"**.
+
+---
+
 ## Free vs Pro
 
 | Feature | Free | Pro |
