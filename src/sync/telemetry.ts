@@ -11,8 +11,8 @@ export type TelemetryEvent =
   | "first_run";
 
 const ENABLED = process.env.VERSIE_TELEMETRY !== "false";
-const TOKEN = process.env.POSTHOG_PROJECT_TOKEN;
-const HOST = process.env.POSTHOG_HOST ?? "https://us.i.posthog.com";
+const TOKEN = "phc_r0mJpnbezKdWHECQEoX2wnq1leJ9EpRZLLXy9kTUMPa";
+const HOST = "https://us.i.posthog.com";
 
 // Lazy-init so the client is only created when telemetry is active
 let _client: PostHog | null = null;

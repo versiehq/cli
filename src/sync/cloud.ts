@@ -1,6 +1,6 @@
 /**
  * Cloud sync — sends events to Supabase via the sync-event Edge Function.
- * Activated only when VERSIE_API_URL and VERSIE_API_KEY are set.
+ * Activated only when an API key is configured.
  * Best-effort: all errors are swallowed — sync never blocks or breaks tool operations.
  */
 
@@ -28,15 +28,15 @@ export interface CloudEvent {
  * No-ops silently if no API key is configured.
  *
  * Auth priority: config.apiKey → VERSIE_API_KEY env var
- * URL priority:  config.apiUrl → VERSIE_API_URL env var → DEFAULT_API_URL
+ * URL priority:  config.apiUrl → DEFAULT_API_URL
  */
 export async function syncEvent(repoPath: string, event: CloudEvent, config?: VersieConfig): Promise<void> {
   const apiKey = config?.apiKey ?? process.env.VERSIE_API_KEY;
   if (!apiKey) return;
-  const apiUrl = config?.apiUrl ?? process.env.VERSIE_API_URL ?? DEFAULT_API_URL;
+
+  const apiUrl = config?.apiUrl ?? DEFAULT_API_URL;
 
   try {
-    // Resolve remote URL for project identity
     const remoteResult = await git(["remote", "get-url", "origin"], repoPath);
     const remoteUrl = remoteResult.stdout.trim();
     if (!remoteUrl) return;
@@ -50,7 +50,7 @@ export async function syncEvent(repoPath: string, event: CloudEvent, config?: Ve
     const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
     try {
-      await fetch(`${apiUrl}/functions/v1/sync-event`, {
+      await fetch(`${apiUrl}/sync-event`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -63,7 +63,7 @@ export async function syncEvent(repoPath: string, event: CloudEvent, config?: Ve
       clearTimeout(timer);
     }
   } catch {
-    // Never surface sync errors to the user
+    // Best-effort — sync failures are silent
   }
 }
 

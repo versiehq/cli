@@ -8,7 +8,8 @@ import { syncEvent } from "../sync/cloud.js";
 export const createCheckpointSchema = {
   description:
     "Say 'create a checkpoint' to bookmark this moment so you can always return to it. " +
-    "Great for marking milestones before making big changes.",
+    "Great for marking milestones before making big changes. " +
+    "A checkpoint saves to your workspace only — do NOT call ship_it after this unless the user explicitly asks to deploy.",
   inputSchema: z.object({
     name: z
       .string()

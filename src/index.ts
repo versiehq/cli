@@ -20,13 +20,11 @@ const server = new McpServer(
   { name: "versie", version: "1.0.0" },
   {
     instructions:
-      "When the user mentions Versie or any version control task (saving work, deploying, going back, checkpoints), " +
-      "always call check_health first if you have not already done so in this conversation. " +
-      "check_health sets up Versie for new projects and verifies the project is ready before other tools run. " +
-      "When the user's message contains a GitHub SSH URL (any string matching git@github.com:...), " +
-      "call check_health immediately with github_url set to that URL — do not skip the github_url parameter. " +
-      "When the user says 'show git commands' or 'hide git commands', " +
-      "call check_health immediately with show_git_commands set to 'on' or 'off' — do not ask clarifying questions. " +
+      "Call check_health only when: (1) the user explicitly asks for a health check or project status, " +
+      "(2) another Versie tool returns an error suggesting the project is not set up, " +
+      "(3) the user's message contains a GitHub SSH URL (call check_health with github_url set to that URL), or " +
+      "(4) the user says 'show git commands' or 'hide git commands' (call check_health with show_git_commands 'on' or 'off'). " +
+      "Do not call check_health automatically before every command — other tools run their own setup checks. " +
       "When a Versie tool returns output, paste it directly into your response as plain text — " +
       "no quotes, no code blocks, no rewording, no added commentary.",
   }
