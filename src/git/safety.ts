@@ -178,3 +178,51 @@ export async function checkDeployConfig(
 
   return null; // No issue found
 }
+
+// ─── Deploy target detection ──────────────────────────────────────────────────
+
+export interface DeployTarget {
+  platform: "vercel" | "netlify" | "railway" | "render" | "github_actions" | "supabase";
+  status: "detected";
+  source: "config_file" | "workflow_file";
+}
+
+/**
+ * Scan the repo for known deploy platform config files.
+ * Returns all detected platforms — status is always "detected" here.
+ * The deploy-status-refresh edge function upgrades confirmed ones via GitHub API.
+ */
+export async function detectDeployTargets(repoPath: string): Promise<DeployTarget[]> {
+  const targets: DeployTarget[] = [];
+  try {
+    const { existsSync, readdirSync } = await import("node:fs");
+    const { join } = await import("node:path");
+
+    if (existsSync(join(repoPath, "vercel.json")) || existsSync(join(repoPath, ".vercel"))) {
+      targets.push({ platform: "vercel", status: "detected", source: "config_file" });
+    }
+    if (existsSync(join(repoPath, "netlify.toml"))) {
+      targets.push({ platform: "netlify", status: "detected", source: "config_file" });
+    }
+    if (existsSync(join(repoPath, "railway.json")) || existsSync(join(repoPath, "railway.toml"))) {
+      targets.push({ platform: "railway", status: "detected", source: "config_file" });
+    }
+    if (existsSync(join(repoPath, "render.yaml"))) {
+      targets.push({ platform: "render", status: "detected", source: "config_file" });
+    }
+    if (existsSync(join(repoPath, "supabase"))) {
+      targets.push({ platform: "supabase", status: "detected", source: "config_file" });
+    }
+
+    const workflowsDir = join(repoPath, ".github", "workflows");
+    if (existsSync(workflowsDir)) {
+      try {
+        const files = readdirSync(workflowsDir).filter((f) => f.endsWith(".yml") || f.endsWith(".yaml"));
+        if (files.length > 0) {
+          targets.push({ platform: "github_actions", status: "detected", source: "workflow_file" });
+        }
+      } catch { /* ignore */ }
+    }
+  } catch { /* non-critical — skip all */ }
+  return targets;
+}

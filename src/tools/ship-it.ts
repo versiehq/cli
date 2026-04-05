@@ -1,10 +1,11 @@
 import { z } from "zod/v4";
 import { git } from "../git/executor.js";
 import { checkFirstRun, ensureInitialized, getDeployGap, resolveWorkingDir } from "../git/branches.js";
-import { checkNoWorktrees, classifyPushFailure, checkDeployConfig } from "../git/safety.js";
+import { checkNoWorktrees, classifyPushFailure, checkDeployConfig, detectDeployTargets } from "../git/safety.js";
 import { createReleaseTag } from "../snapshots/manager.js";
 import { track } from "../sync/telemetry.js";
 import { syncEvent } from "../sync/cloud.js";
+import { sendHeartbeat } from "../sync/heartbeat.js";
 
 export const shipItSchema = {
   description:
@@ -160,12 +161,17 @@ export async function shipIt(args: z.infer<typeof shipItSchema.inputSchema>): Pr
 
     track("ship_it", { type: "rollback" }, config);
     const rbHashResult = await git(["rev-parse", config.liveBranch], repoPath);
+    const rbDeployTargets = await detectDeployTargets(repoPath);
     syncEvent(repoPath, {
       type: "rollback",
       timestamp: new Date().toISOString(),
       commit_hash: rbHashResult.stdout.trim(),
       message: `Rolled back to ${rollbackLabel}`,
-      metadata: { release_tag: rbReleaseTag, rollback_label: rollbackLabel },
+      metadata: {
+        release_tag: rbReleaseTag,
+        rollback_label: rollbackLabel,
+        ...(rbDeployTargets.length > 0 ? { deploy_targets: rbDeployTargets } : {}),
+      },
     }, config);
     return `Rolled back! Your live app now matches "${rollbackLabel}". (${rbReleaseTag})${rbGitNote}`;
   }
@@ -271,13 +277,19 @@ export async function shipIt(args: z.infer<typeof shipItSchema.inputSchema>): Pr
   const summary = gap.summaries.length > 0 ? ` — ${gap.summaries.slice(0, 2).join(", ")}${gap.summaries.length > 2 ? "…" : ""}` : "";
   track("ship_it", { type: "forward", changes: gap.count }, config);
   const deployHashResult = await git(["rev-parse", config.liveBranch], repoPath);
+  const deployTargets = await detectDeployTargets(repoPath);
   syncEvent(repoPath, {
     type: "deploy",
     timestamp: new Date().toISOString(),
     commit_hash: deployHashResult.stdout.trim(),
     message: gap.summaries.length > 0 ? gap.summaries.slice(0, 2).join(", ") : `Shipped ${changeCount}`,
     files_changed: gap.count,
-    metadata: { release_tag: releaseTag, change_count: gap.count },
+    metadata: {
+      release_tag: releaseTag,
+      change_count: gap.count,
+      ...(deployTargets.length > 0 ? { deploy_targets: deployTargets } : {}),
+    },
   }, config);
+  sendHeartbeat(repoPath, "ship");
   return `Shipped! ${changeCount} live${summary}. (${releaseTag})${gitNote}${unsavedNote}`;
 }

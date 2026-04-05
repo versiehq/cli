@@ -4,6 +4,7 @@ import { checkFirstRun, ensureOnDev, getDeployGap, resolveWorkingDir, isClaudeWo
 import { classifyPushFailure } from "../git/safety.js";
 import { track } from "../sync/telemetry.js";
 import { syncEvent } from "../sync/cloud.js";
+import { sendHeartbeat } from "../sync/heartbeat.js";
 
 export const saveMyWorkSchema = {
   description:
@@ -106,6 +107,7 @@ export async function saveMyWork(args: z.infer<typeof saveMyWorkSchema.inputSche
       ...(files.length ? { files } : {}),
     },
   }, config);
+  sendHeartbeat(repoPath, "save");
   return `Saved! ${message}. (Your live app wasn't affected.)${gapNote}${worktreeNote}${gitNote}`;
 }
 

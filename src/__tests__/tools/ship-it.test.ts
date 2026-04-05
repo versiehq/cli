@@ -17,6 +17,7 @@ vi.mock("../../git/safety.js", () => ({
   checkNoWorktrees: vi.fn(),
   classifyPushFailure: vi.fn(),
   checkDeployConfig: vi.fn(),
+  detectDeployTargets: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock("../../snapshots/manager.js", () => ({

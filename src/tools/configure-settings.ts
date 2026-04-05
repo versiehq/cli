@@ -51,16 +51,21 @@ export async function configureSettings(args: z.infer<typeof configureSettingsSc
     return await loginWithDeviceFlow(repoPath);
   }
 
-  // Disconnect — remove both device flow token and legacy API key
+  // Disconnect — remove global token, per-project token, and legacy API key
   if (args.disconnect) {
     const { apiKey: _removed, ...rest } = config;
     writeConfig(repoPath, rest);
-    // Remove auth.json if it exists
     try {
       const { unlinkSync, existsSync } = await import("node:fs");
       const { join } = await import("node:path");
-      const authPath = join(repoPath, ".versie", "auth.json");
-      if (existsSync(authPath)) unlinkSync(authPath);
+      const { homedir } = await import("node:os");
+      // Global auth (preferred location)
+      const configBase = process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config");
+      const globalPath = join(configBase, "versie", "auth.json");
+      if (existsSync(globalPath)) unlinkSync(globalPath);
+      // Per-project auth (legacy location)
+      const projectPath = join(repoPath, ".versie", "auth.json");
+      if (existsSync(projectPath)) unlinkSync(projectPath);
     } catch { /* best-effort */ }
     return "Disconnected from the Versie dashboard. Your saves and ships will continue working — they just won't sync to the dashboard.";
   }
