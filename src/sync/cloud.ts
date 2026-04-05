@@ -6,6 +6,7 @@
 
 import { createHash } from "node:crypto";
 import { git } from "../git/executor.js";
+import { readAuthToken } from "../auth/device-flow.js";
 import type { VersieConfig } from "../utils/config.js";
 
 const DEFAULT_API_URL = "https://versie.co/api";
@@ -31,7 +32,8 @@ export interface CloudEvent {
  * URL priority:  config.apiUrl → DEFAULT_API_URL
  */
 export async function syncEvent(repoPath: string, event: CloudEvent, config?: VersieConfig): Promise<void> {
-  const apiKey = config?.apiKey ?? process.env.VERSIE_API_KEY;
+  // Auth priority: device flow token (.versie/auth.json) → legacy apiKey → env var
+  const apiKey = readAuthToken(repoPath) ?? config?.apiKey ?? process.env.VERSIE_API_KEY;
   if (!apiKey) return;
 
   const apiUrl = config?.apiUrl ?? DEFAULT_API_URL;

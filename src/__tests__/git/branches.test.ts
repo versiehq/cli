@@ -31,35 +31,68 @@ beforeEach(() => {
 });
 
 describe("getDeployGap", () => {
+  // Helper: normal fetch sequence (no rollback) — fetch, aheadCheck (empty), update-ref, then log
+  function mockNormalFetch(logOutput = "") {
+    mockGit
+      .mockResolvedValueOnce(ok(""))        // fetch
+      .mockResolvedValueOnce(ok(""))        // aheadCheck — empty = no rollback
+      .mockResolvedValueOnce(ok(""))        // update-ref
+      .mockResolvedValueOnce(ok(logOutput)); // log
+  }
+
   it("returns count=0 and empty summaries when nothing to deploy", async () => {
-    mockGit.mockResolvedValue(ok(""));
+    mockNormalFetch();
     const gap = await getDeployGap(REPO, CONFIG);
     expect(gap).toEqual({ count: 0, summaries: [] });
   });
 
   it("counts commits correctly", async () => {
-    mockGit.mockResolvedValue(ok("abc1234 Updated footer\ndef5678 Fixed header"));
+    mockNormalFetch("abc1234 Updated footer\ndef5678 Fixed header");
     const gap = await getDeployGap(REPO, CONFIG);
     expect(gap.count).toBe(2);
   });
 
   it("strips commit hashes from summaries", async () => {
-    mockGit.mockResolvedValue(ok("abc1234 Updated footer\ndef5678 Fixed header"));
+    mockNormalFetch("abc1234 Updated footer\ndef5678 Fixed header");
     const gap = await getDeployGap(REPO, CONFIG);
     expect(gap.summaries).toEqual(["Updated footer", "Fixed header"]);
   });
 
-  it("calls git log with correct branch range", async () => {
-    mockGit.mockResolvedValue(ok(""));
+  it("calls fetch, aheadCheck, update-ref, then log with origin/main when fetch succeeds", async () => {
+    mockNormalFetch();
     await getDeployGap(REPO, CONFIG);
-    expect(mockGit).toHaveBeenCalledWith(
-      ["log", "main..versie-dev", "--oneline"],
-      REPO
-    );
+    expect(mockGit).toHaveBeenNthCalledWith(1, ["fetch", "origin", "main"], REPO);
+    expect(mockGit).toHaveBeenNthCalledWith(2, ["log", "origin/main..main", "--oneline"], REPO);
+    expect(mockGit).toHaveBeenNthCalledWith(3, ["update-ref", "refs/heads/main", "origin/main"], REPO);
+    expect(mockGit).toHaveBeenNthCalledWith(4, ["log", "origin/main..versie-dev", "--oneline"], REPO);
+  });
+
+  it("sets dashboardRollbackDetected when local main is ahead of origin", async () => {
+    mockGit
+      .mockResolvedValueOnce(ok(""))                      // fetch
+      .mockResolvedValueOnce(ok("abc1234 Merge dev\n"))   // aheadCheck — has commits = rollback
+      .mockResolvedValueOnce(ok(""))                      // update-ref
+      .mockResolvedValueOnce(ok("def5678 New save\n"));   // log
+    const gap = await getDeployGap(REPO, CONFIG);
+    expect(gap.dashboardRollbackDetected).toBe(true);
+  });
+
+  it("does not set dashboardRollbackDetected in normal state", async () => {
+    mockNormalFetch("abc1234 New save");
+    const gap = await getDeployGap(REPO, CONFIG);
+    expect(gap.dashboardRollbackDetected).toBeUndefined();
+  });
+
+  it("falls back to local live branch and skips ahead-check/update-ref when fetch fails", async () => {
+    mockGit
+      .mockResolvedValueOnce({ stdout: "", stderr: "network error", exitCode: 1 }) // fetch fails
+      .mockResolvedValueOnce(ok("")); // log (no aheadCheck or update-ref)
+    await getDeployGap(REPO, CONFIG);
+    expect(mockGit).toHaveBeenNthCalledWith(2, ["log", "main..versie-dev", "--oneline"], REPO);
   });
 
   it("uses provided config without calling readConfig again", async () => {
-    mockGit.mockResolvedValue(ok(""));
+    mockNormalFetch();
     await getDeployGap(REPO, CONFIG);
     expect(mockReadConfig).not.toHaveBeenCalled();
   });

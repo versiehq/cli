@@ -400,13 +400,48 @@ export async function ensureOnDev(repoPath: string, config?: VersieConfig): Prom
 export interface DeployGap {
   count: number;
   summaries: string[]; // commit messages (no hashes)
+  dashboardRollbackDetected?: boolean; // true when origin/main was rolled back from the dashboard
 }
 
 /** How many commits are on dev but not yet on live */
 export async function getDeployGap(repoPath: string, config?: VersieConfig): Promise<DeployGap> {
   const resolvedConfig = config ?? await ensureInitialized(repoPath);
+
+  // Fetch the live branch from remote so dashboard rollbacks are reflected.
+  // Best-effort — if the network is unavailable or there's no remote, fall back
+  // to the local ref without blocking the health check.
+  const fetchResult = await git(
+    ["fetch", "origin", resolvedConfig.liveBranch],
+    repoPath
+  );
+  let liveRef: string;
+  let dashboardRollbackDetected = false;
+  if (fetchResult.exitCode === 0) {
+    liveRef = `origin/${resolvedConfig.liveBranch}`;
+
+    // Check if local live branch has commits that origin doesn't — this means
+    // origin was force-pushed back (dashboard rollback). Normal case: they match.
+    const aheadCheck = await git(
+      ["log", `origin/${resolvedConfig.liveBranch}..${resolvedConfig.liveBranch}`, "--oneline"],
+      repoPath
+    );
+    if (aheadCheck.stdout.trim()) {
+      dashboardRollbackDetected = true;
+    }
+
+    // Sync local live branch to match origin — a dashboard rollback force-pushes
+    // origin/main to an older commit, leaving local main diverged. Updating the
+    // local ref here keeps `ship it` (which does `git pull`) from failing.
+    await git(
+      ["update-ref", `refs/heads/${resolvedConfig.liveBranch}`, `origin/${resolvedConfig.liveBranch}`],
+      repoPath
+    );
+  } else {
+    liveRef = resolvedConfig.liveBranch;
+  }
+
   const result = await git(
-    ["log", `${resolvedConfig.liveBranch}..${resolvedConfig.devBranch}`, "--oneline"],
+    ["log", `${liveRef}..${resolvedConfig.devBranch}`, "--oneline"],
     repoPath
   );
   if (!result.stdout) return { count: 0, summaries: [] };
@@ -414,6 +449,7 @@ export async function getDeployGap(repoPath: string, config?: VersieConfig): Pro
   return {
     count: lines.length,
     summaries: lines.map((l) => l.replace(/^[a-f0-9]+ /, "")),
+    ...(dashboardRollbackDetected && { dashboardRollbackDetected: true }),
   };
 }
 

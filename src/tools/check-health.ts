@@ -108,7 +108,12 @@ export async function checkHealth(args: z.infer<typeof checkHealthSchema.inputSc
   }
 
   // 4. Deploy gap
-  if (gap.count === 0) {
+  if (gap.dashboardRollbackDetected) {
+    checks.push(
+      `↩ Your live app was rolled back from the dashboard — local version history updated to match.\n` +
+      `  Your workspace (${config.devBranch}) is untouched. Say 'ship it' to make your saves live again, or keep working first.`
+    );
+  } else if (gap.count === 0) {
     checks.push(`✓ Your live app is up to date with your latest work`);
   } else if (gap.count <= 5) {
     checks.push(`ℹ ${gap.count} save${gap.count === 1 ? "" : "s"} not yet shipped — say 'ship it' when ready`);

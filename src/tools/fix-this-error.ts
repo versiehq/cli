@@ -4,6 +4,7 @@ import { checkFirstRun, ensureInitialized, resolveWorkingDir } from "../git/bran
 import { createAutoSnapshot } from "../snapshots/manager.js";
 import { PATTERNS, type ErrorPattern } from "../errors/patterns.js";
 import { track } from "../sync/telemetry.js";
+import { sanitizeErrorText } from "../sync/sanitize.js";
 
 export const fixThisErrorSchema = {
   description:
@@ -32,11 +33,13 @@ export async function fixThisError(args: z.infer<typeof fixThisErrorSchema.input
   const pattern = PATTERNS.find((p) => p.match.test(errorText));
 
   if (!pattern) {
+    const { text: sanitizedText, isKnown } = sanitizeErrorText(errorText);
     track("fix_this_error", {
       pattern_matched: null,
       fix_attempted: false,
       fix_succeeded: null,
-      error_text: errorText.slice(0, 1000),
+      error_text: sanitizedText,
+      is_known_git_error: isKnown,
     }, config);
     return (
       `I don't recognize that error yet.\n\n` +
@@ -81,7 +84,8 @@ export async function fixThisError(args: z.infer<typeof fixThisErrorSchema.input
       pattern_matched: pattern.id,
       fix_attempted: true,
       fix_succeeded: false,
-      error_text: errorText.slice(0, 1000),
+      error_text: sanitizeErrorText(errorText).text,
+      is_known_git_error: true,
     }, config);
     return (
       `${pattern.explanation}\n\n` +
@@ -94,7 +98,8 @@ export async function fixThisError(args: z.infer<typeof fixThisErrorSchema.input
     pattern_matched: pattern.id,
     fix_attempted: true,
     fix_succeeded: true,
-    error_text: errorText.slice(0, 1000),
+    error_text: sanitizeErrorText(errorText).text,
+    is_known_git_error: true,
   }, config);
   return `${pattern.explanation}\n\n${pattern.successMessage ?? "Fixed! Try what you were doing again."}`;
 }

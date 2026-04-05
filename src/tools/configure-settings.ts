@@ -1,27 +1,36 @@
 import { z } from "zod/v4";
 import { checkFirstRun, resolveWorkingDir } from "../git/branches.js";
 import { readConfig, writeConfig } from "../utils/config.js";
+import { loginWithDeviceFlow, isAuthenticated } from "../auth/device-flow.js";
 
 export const configureSettingsSchema = {
   description:
-    "Fallback for toggling Versie settings, or for connecting Versie to the dashboard with an API key. " +
-    "Use when the user says 'connect versie to my dashboard', 'my versie key is...', 'disconnect from dashboard', " +
-    "'turn off telemetry', or 'opt out of telemetry'. " +
+    "Manages Versie settings and dashboard connection. " +
+    "Use when the user says 'versie login', 'connect to dashboard', 'connect versie to my dashboard', 'disconnect from dashboard', " +
+    "'turn off telemetry', 'opt out of telemetry', or 'my versie key is...' (legacy API key, still supported). " +
     "For 'show/hide git commands', prefer check_health with show_git_commands param instead.",
   inputSchema: z.object({
-    show_git_commands: z
-      .enum(["on", "off"])
+    login: z
+      .boolean()
       .optional()
-      .describe("Set to 'on' to show underlying git commands in output, 'off' to hide them."),
+      .describe("Set to true when the user says 'versie login' or 'connect to dashboard'. Starts the Device Flow browser auth."),
+    disconnect: z
+      .boolean()
+      .optional()
+      .describe("Set to true when the user says 'disconnect from dashboard'. Removes auth token and API key."),
     api_key: z
       .string()
       .max(200)
       .optional()
-      .describe("Versie Pro API key from versie.co/settings. Set to 'disconnect' to remove the key and disable cloud sync."),
+      .describe("Legacy: Versie Pro API key from versie.co/settings. Still supported but Device Flow (login: true) is preferred."),
     telemetry: z
       .enum(["on", "off"])
       .optional()
       .describe("Set to 'off' to opt out of anonymous telemetry, 'on' to opt back in."),
+    show_git_commands: z
+      .enum(["on", "off"])
+      .optional()
+      .describe("Set to 'on' to show underlying git commands in output, 'off' to hide them."),
     repo_path: z
       .string()
       .optional()
@@ -37,12 +46,27 @@ export async function configureSettings(args: z.infer<typeof configureSettingsSc
   const config = readConfig(repoPath);
   if (!config) return "Versie isn't set up yet. Say 'versie setup' to get started.";
 
+  // Device Flow login — opens browser, polls until approved
+  if (args.login) {
+    return await loginWithDeviceFlow(repoPath);
+  }
+
+  // Disconnect — remove both device flow token and legacy API key
+  if (args.disconnect) {
+    const { apiKey: _removed, ...rest } = config;
+    writeConfig(repoPath, rest);
+    // Remove auth.json if it exists
+    try {
+      const { unlinkSync, existsSync } = await import("node:fs");
+      const { join } = await import("node:path");
+      const authPath = join(repoPath, ".versie", "auth.json");
+      if (existsSync(authPath)) unlinkSync(authPath);
+    } catch { /* best-effort */ }
+    return "Disconnected from the Versie dashboard. Your saves and ships will continue working — they just won't sync to the dashboard.";
+  }
+
+  // Legacy API key
   if (args.api_key !== undefined) {
-    if (args.api_key === "disconnect") {
-      const { apiKey: _removed, ...rest } = config;
-      writeConfig(repoPath, rest);
-      return "Disconnected from the Versie dashboard. Your saves and ships will continue working — they just won't sync to the dashboard.";
-    }
     writeConfig(repoPath, { ...config, apiKey: args.api_key });
     return "Connected! Your saves, ships, and checkpoints will now sync to the Versie dashboard.";
   }
@@ -61,9 +85,11 @@ export async function configureSettings(args: z.infer<typeof configureSettingsSc
       : "Git commands off — tools will show plain output again.";
   }
 
+  // Status summary
+  const connected = isAuthenticated(repoPath);
   return (
+    `Dashboard: ${connected ? "connected" : "not connected"}${!connected ? " — say 'versie login' to connect" : ""}\n` +
     `Show git commands: ${config.showGitCommands ? "on" : "off"}\n` +
-    `Telemetry: ${config.telemetry === false ? "off" : "on"}\n` +
-    `Dashboard: ${config.apiKey ? "connected" : "not connected"}`
+    `Telemetry: ${config.telemetry === false ? "off" : "on"}`
   );
 }

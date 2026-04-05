@@ -13,7 +13,11 @@ export const saveMyWorkSchema = {
     description: z
       .string()
       .optional()
-      .describe("Plain-language past-tense summary of what changed (e.g. 'Updated homepage hero text', 'Fixed typo in contact form'). If you know what the user was working on, provide this — otherwise omit it and the tool will generate one automatically."),
+      .describe("ALWAYS provide this. Describe the code change itself — what was built, fixed, or changed — not the act of saving. One sentence, past tense. Think: what would a developer write as a git commit message? Good: 'Added dark mode to profile menu', 'Fixed mobile nav overflow on small screens', 'Switched timeline font to serif'. Bad: 'Saved current progress', 'Updated project files', 'Made some changes', 'Updated 2 files', 'No new changes', 'No changes since last save'. The message must describe what changed, not how many files or that a save occurred."),
+    body: z
+      .string()
+      .optional()
+      .describe("For changes spanning multiple areas that a developer would want to reference later, add structured bullet points grouped by area using '- item' format. Omit for simple single-focus changes. Example: '- Added CSS token system for colors and spacing\\n- Updated nav and timeline to use new tokens\\n- Fixed contrast on error badges in dark mode'"),
     repo_path: z
       .string()
       .optional()
@@ -37,11 +41,18 @@ export async function saveMyWork(args: z.infer<typeof saveMyWorkSchema.inputSche
   // Stage all changes
   await git(["add", "-A"], repoPath);
 
-  // Generate commit message from pre-stage status, or use provided description
-  const message = args.description || generateMessage(statusResult.stdout);
+  // Resolve the best available description, with two server-side guards:
+  // 1. Reject "no changes" descriptions (LLM confusion) and generic auto-generated-style
+  //    messages ("Updated 2 files") — fall back to auto-generate from git status.
+  // 2. If body was provided but description is missing/rejected, promote the first body
+  //    line as the title (LLM sometimes puts the real description in body only).
+  const rawDesc = isWeakDescription(args.description) ? undefined : args.description;
+  const description = rawDesc ?? extractTitleFromBody(args.body);
+  const message = description || generateMessage(statusResult.stdout);
+  const commitMessage = args.body ? `${message}\n\n${args.body}` : message;
 
   // Commit
-  const commitResult = await git(["commit", "-m", message], repoPath);
+  const commitResult = await git(["commit", "-m", commitMessage], repoPath);
   if (commitResult.exitCode !== 0) {
     throw new Error(`Save failed: ${commitResult.stderr}`);
   }
@@ -82,14 +93,68 @@ export async function saveMyWork(args: z.infer<typeof saveMyWorkSchema.inputSche
     : "";
   track("save_my_work", {}, config);
   const hashResult = await git(["rev-parse", "HEAD"], repoPath);
+  const diffResult = await git(["diff-tree", "--no-commit-id", "-r", "--name-status", "HEAD"], repoPath);
+  const files = parseDiffTree(diffResult.stdout);
   syncEvent(repoPath, {
     type: "save",
     timestamp: new Date().toISOString(),
     commit_hash: hashResult.stdout.trim(),
     message,
-    files_changed: statusResult.stdout.split("\n").filter(Boolean).length,
+    files_changed: files.length || statusResult.stdout.split("\n").filter(Boolean).length,
+    metadata: {
+      ...(args.body ? { body: args.body } : {}),
+      ...(files.length ? { files } : {}),
+    },
   }, config);
   return `Saved! ${message}. (Your live app wasn't affected.)${gapNote}${worktreeNote}${gitNote}`;
+}
+
+type FileEntry = { status: string; path: string };
+
+// Detect weak descriptions the LLM should not be using as commit titles.
+// Two categories:
+//   1. "No changes" language — LLM confused about whether changes exist
+//   2. Auto-generated-style — LLM echoed what generateMessage() would produce
+const WEAK_DESC_PATTERNS = [
+  // No-changes language
+  /no new changes/i,
+  /no changes/i,
+  /nothing changed/i,
+  /nothing to save/i,
+  /already saved/i,
+  /nothing new/i,
+  /no updates/i,
+  // Generic auto-generated-style messages
+  /^updated? \d+ files?\.?$/i,
+  /^added \d+ files?\.?$/i,
+  /^deleted \d+ files?\.?$/i,
+  /^updated? project files?\.?$/i,
+  /^saved( (current )?progress)?\.?$/i,
+  /^made (some )?changes?\.?$/i,
+];
+
+function isWeakDescription(desc: string | undefined): boolean {
+  if (!desc) return false;
+  return WEAK_DESC_PATTERNS.some(p => p.test(desc.trim()));
+}
+
+// If the LLM put the real description in body but omitted title, promote the first
+// body line (stripping leading "- " bullet marker) as the commit title.
+function extractTitleFromBody(body: string | undefined): string | undefined {
+  if (!body) return undefined;
+  const first = body.split("\n").find(l => l.trim());
+  if (!first) return undefined;
+  const title = first.replace(/^-\s*/, "").trim();
+  return title.length > 0 ? title : undefined;
+}
+
+function parseDiffTree(output: string): FileEntry[] {
+  return output.split("\n").filter(Boolean).map(line => {
+    const parts = line.split("\t");
+    const status = parts[0].charAt(0); // M, A, D, R, C — take first char (R090 → R)
+    const path = parts[parts.length - 1]; // last segment = new path (handles renames)
+    return { status, path };
+  });
 }
 
 function generateMessage(porcelain: string): string {

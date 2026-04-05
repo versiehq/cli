@@ -4,13 +4,15 @@ import { checkFirstRun, ensureOnDev, getDeployGap, resolveWorkingDir } from "../
 
 export const whatsChangedSchema = {
   description:
-    "Say 'what's changed' or 'what's not live yet' to see changes. " +
-    "Ask 'since last save' for uncommitted changes, or 'since last ship' for what's saved but not live yet.",
+    "Shows what has changed. Use for: 'show changes', 'what's changed', 'what's not live yet', 'what have I done'. " +
+    "IMPORTANT: omit 'since' unless the user specifically asks about one timeframe — omitting it shows BOTH unsaved changes AND unshipped saves, which is almost always what they want. " +
+    "Only set since='last save' if they explicitly say 'since my last save' or 'unsaved changes'. " +
+    "Only set since='last ship' if they explicitly say 'since I last shipped' or 'what's not live yet'.",
   inputSchema: z.object({
     since: z
       .enum(["last save", "last ship"])
       .optional()
-      .describe("'last save' for uncommitted changes, 'last ship' for what's not live yet."),
+      .describe("Omit to show both sections. 'last save' = uncommitted changes only. 'last ship' = unshipped saves only."),
     repo_path: z
       .string()
       .optional()

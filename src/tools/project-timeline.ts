@@ -39,11 +39,17 @@ export async function projectTimeline(args: z.infer<typeof projectTimelineSchema
   const limit = args.limit ?? 10;
   const releaseTagNames = config.releases ?? [];
 
-  // Fetch all streams + tags pointing at workspace HEAD in parallel
-  const [workLog, checkpointTags, workspaceTagsResult, ...releaseResults] = await Promise.all([
+  // Fetch origin/main so dashboard rollbacks are reflected in the live marker.
+  // Best-effort — if offline, the live marker falls back to local main.
+  await git(["fetch", "origin", config.liveBranch], repoPath);
+
+  // Fetch all streams + tags pointing at workspace/live HEAD in parallel
+  const [workLog, checkpointTags, workspaceTagsResult, liveTagsResult, ...releaseResults] = await Promise.all([
     git(["log", config.devBranch, "--format=%s|%ar|%ct", "--invert-grep", "--grep=^Auto-snapshot", "--grep=^Merge branch 'versie-dev'", "--grep=^Rolled back to", `-${limit * 3}`], repoPath),
     git(["tag", "-l", "checkpoint/*", "--sort=-creatordate", "--format=%(refname:short)|%(subject)|%(creatordate:relative)|%(creatordate:format:%s)"], repoPath),
     git(["tag", "--points-at", config.devBranch], repoPath),
+    // Tags pointing at the current live commit (origin/main, fallback to local main)
+    git(["tag", "--points-at", `origin/${config.liveBranch}`], repoPath),
     // Fetch timestamps for each Versie release tag individually
     ...releaseTagNames.map((tag) =>
       git(["tag", "-l", tag, "--format=%(refname:short)|%(creatordate:relative)|%(creatordate:format:%s)"], repoPath)
@@ -52,6 +58,8 @@ export async function projectTimeline(args: z.infer<typeof projectTimelineSchema
 
   // Tags pointing at current workspace HEAD (non-empty only when at a restore point)
   const workspaceTags = new Set(workspaceTagsResult.stdout.split("\n").filter(Boolean));
+  // Tags pointing at the current live commit (what's actually deployed)
+  const liveTags = new Set(liveTagsResult.stdout.split("\n").filter(Boolean));
 
   const entries: Entry[] = [];
 
@@ -82,14 +90,20 @@ export async function projectTimeline(args: z.infer<typeof projectTimelineSchema
   const shown = entries.slice(0, limit);
   const hasMore = entries.length > limit;
 
-  // Only mark the first (most recent) matching entry — if a checkpoint and a release tag
-  // happen to point to the same commit, we don't want both showing ◀ workspace.
+  // Mark each entry with ◀ live and/or ◀ workspace as appropriate.
+  // Only mark the first matching entry for each — avoids duplicate markers when
+  // a checkpoint and release tag happen to point to the same commit.
   let workspaceMarked = false;
+  let liveMarked = false;
   const entryLines = shown.map((e) => {
-    if (!workspaceMarked && e.tagName && workspaceTags.has(e.tagName)) {
-      workspaceMarked = true;
-      return `${e.display}  ◀ workspace`;
-    }
+    if (!e.tagName) return e.display;
+    const isWorkspace = !workspaceMarked && workspaceTags.has(e.tagName);
+    const isLive = !liveMarked && liveTags.has(e.tagName);
+    if (isWorkspace) workspaceMarked = true;
+    if (isLive) liveMarked = true;
+    if (isWorkspace && isLive) return `${e.display}  ◀ live  workspace`;
+    if (isLive) return `${e.display}  ◀ live`;
+    if (isWorkspace) return `${e.display}  ◀ workspace`;
     return e.display;
   }).join("\n\n");
 
