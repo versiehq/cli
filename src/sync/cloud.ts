@@ -69,6 +69,61 @@ export async function syncEvent(repoPath: string, event: CloudEvent, config?: Ve
   }
 }
 
+export interface DeployStatusSummary {
+  platform: string;
+  status: "pending" | "success" | "failure" | "error";
+  label: string | null;
+  external_url: string | null;
+}
+
+/**
+ * Fetch deploy statuses for the given release tags from the cloud.
+ * Pro users only — returns null if not authenticated or free plan.
+ * Best-effort: returns null on any failure.
+ */
+export async function fetchDeployStatuses(
+  repoPath: string,
+  releaseTags: string[],
+  config?: VersieConfig
+): Promise<Record<string, DeployStatusSummary[]> | null> {
+  if (releaseTags.length === 0) return null;
+
+  const apiKey = readAuthToken(repoPath) ?? config?.apiKey ?? process.env.VERSIE_API_KEY;
+  if (!apiKey) return null;
+
+  const apiUrl = config?.apiUrl ?? DEFAULT_API_URL;
+
+  try {
+    const remoteResult = await git(["remote", "get-url", "origin"], repoPath);
+    const remoteUrl = remoteResult.stdout.trim();
+    if (!remoteUrl) return null;
+
+    const repoHash = createHash("sha256").update(remoteUrl).digest("hex");
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+    try {
+      const res = await fetch(`${apiUrl}/timeline-statuses`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({ repo_hash: repoHash, release_tags: releaseTags }),
+        signal: controller.signal,
+      });
+      if (!res.ok) return null;
+      const data = await res.json() as { statuses?: Record<string, DeployStatusSummary[]> };
+      return data.statuses ?? null;
+    } finally {
+      clearTimeout(timer);
+    }
+  } catch {
+    return null;
+  }
+}
+
 /** Extract a human-readable repo name from a git remote URL. */
 function deriveRepoName(remoteUrl: string): string {
   // Handles: git@github.com:org/repo.git, https://github.com/org/repo.git, https://github.com/org/repo

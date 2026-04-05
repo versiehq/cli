@@ -1,6 +1,7 @@
 import { z } from "zod/v4";
 import { git } from "../git/executor.js";
 import { checkFirstRun, ensureInitialized, resolveWorkingDir } from "../git/branches.js";
+import { fetchDeployStatuses } from "../sync/cloud.js";
 
 export const projectTimelineSchema = {
   description:
@@ -90,6 +91,14 @@ export async function projectTimeline(args: z.infer<typeof projectTimelineSchema
   const shown = entries.slice(0, limit);
   const hasMore = entries.length > limit;
 
+  // Fetch deploy statuses for ship entries (Pro users only, best-effort)
+  const shipTags = shown
+    .filter((e) => e.tagName && /^v\d+$/.test(e.tagName))
+    .map((e) => e.tagName!);
+  const deployStatuses = shipTags.length > 0
+    ? await fetchDeployStatuses(repoPath, shipTags, config)
+    : null;
+
   // Mark each entry with ◀ live and/or ◀ workspace as appropriate.
   // Only mark the first matching entry for each — avoids duplicate markers when
   // a checkpoint and release tag happen to point to the same commit.
@@ -101,10 +110,25 @@ export async function projectTimeline(args: z.infer<typeof projectTimelineSchema
     const isLive = !liveMarked && liveTags.has(e.tagName);
     if (isWorkspace) workspaceMarked = true;
     if (isLive) liveMarked = true;
-    if (isWorkspace && isLive) return `${e.display}  ◀ live  workspace`;
-    if (isLive) return `${e.display}  ◀ live`;
-    if (isWorkspace) return `${e.display}  ◀ workspace`;
-    return e.display;
+
+    let line = e.display;
+    if (isWorkspace && isLive) line += "  ◀ live  workspace";
+    else if (isLive) line += "  ◀ live";
+    else if (isWorkspace) line += "  ◀ workspace";
+
+    // Append deploy status summary for Pro users
+    const statuses = deployStatuses?.[e.tagName];
+    if (statuses?.length) {
+      const parts = statuses.map((s) => {
+        const name = s.label && s.label !== s.platform ? s.label : platformLabel(s.platform);
+        if (s.status === "success") return `✓ ${name}`;
+        if (s.status === "failure" || s.status === "error") return `✗ ${name}`;
+        return `~ ${name}`;
+      });
+      line += `  [${parts.join(" · ")}]`;
+    }
+
+    return line;
   }).join("\n\n");
 
   const footer = hasMore
@@ -112,4 +136,17 @@ export async function projectTimeline(args: z.infer<typeof projectTimelineSchema
     : "";
 
   return `YOUR TIMELINE\n─────────────\n\n${entryLines}\n\n○ saved (workspace)  ★ checkpoint (workspace)  ● shipped live${footer}`;
+}
+
+const PLATFORM_LABELS: Record<string, string> = {
+  vercel: "Vercel",
+  netlify: "Netlify",
+  railway: "Railway",
+  render: "Render",
+  supabase: "Supabase",
+  github_actions: "CI",
+};
+
+function platformLabel(platform: string): string {
+  return PLATFORM_LABELS[platform] ?? platform;
 }
