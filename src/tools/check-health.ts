@@ -6,12 +6,14 @@ import { runSetupFlow, ensureInitialized, getDeployGap, resolveWorkingDir } from
 import { checkIsRepo, checkDeployConfig, checkNoWorktrees } from "../git/safety.js";
 import { listCheckpoints } from "../snapshots/manager.js";
 import { readConfig, writeConfig } from "../utils/config.js";
+import { syncEvent } from "../sync/cloud.js";
 
 export const checkHealthSchema = {
   description:
     "Say 'setup versie', 'check health', 'project health', 'get started', or 'check my project' to initialize or check project status. " +
     "If the user provides a GitHub SSH URL (e.g. 'set up versie with git@github.com:you/repo.git'), pass it as github_url. " +
-    "For 'show git commands' or 'hide git commands', call this tool with show_git_commands set to 'on' or 'off'.",
+    "For 'show git commands' or 'hide git commands', call this tool with show_git_commands set to 'on' or 'off'. " +
+    "Do NOT use this tool for 'versie login', 'connect to dashboard', or any login/auth request — use configure_settings for those.",
   inputSchema: z.object({
     github_url: z
       .string()
@@ -144,5 +146,11 @@ export async function checkHealth(args: z.infer<typeof checkHealthSchema.inputSc
     checks.push(`⚠ ${deployWarningMsg}`);
   }
 
-  return checks.join("\n\n");
+  const result = checks.join("\n\n");
+
+  // Best-effort sync — registers the project in the dashboard and keeps it active
+  const syncConfig = readConfig(repoPath);
+  syncEvent(repoPath, { type: "health_check", timestamp: new Date().toISOString() }, syncConfig ?? undefined).catch(() => {});
+
+  return result;
 }

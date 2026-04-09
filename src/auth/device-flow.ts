@@ -8,15 +8,15 @@
  * in config.json for backward compatibility.
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { execFile } from "node:child_process";
 import { readConfig } from "../utils/config.js";
 
-const DEVICE_AUTH_URL = "https://versie.co/api/device-auth";
+const DEVICE_AUTH_URL = "https://www.versie.co/api/device-auth";
 const POLL_INTERVAL_MS = 5_000;
-const MAX_POLL_ATTEMPTS = 120; // 10 minutes
+const MAX_POLL_ATTEMPTS = 6; // 30 seconds
 
 interface AuthFile {
   token: string;
@@ -47,9 +47,12 @@ function projectAuthPath(repoPath: string): string {
   return join(repoPath, ".versie", "auth.json");
 }
 
-/** Start the Device Flow login. Opens the browser and polls until approved or timed out. */
-export async function loginWithDeviceFlow(repoPath: string): Promise<string> {
-  // 1. Request a device code
+/**
+ * Phase 1 — request a code, open the browser, return immediately.
+ * The user_code is shown in Claude so the user can confirm it matches the browser.
+ * Saves the device_code to a pending file so phase 2 can poll without extra input.
+ */
+export async function startDeviceFlow(_repoPath: string): Promise<string> {
   let codeData: DeviceCodeResponse;
   try {
     const res = await fetch(DEVICE_AUTH_URL, {
@@ -64,9 +67,13 @@ export async function loginWithDeviceFlow(repoPath: string): Promise<string> {
   }
 
   const { device_code, user_code, verification_url } = codeData;
-  const urlWithCode = `${verification_url}?code=${user_code}`;
+  const devicePageBase = new URL("/auth/device", verification_url).toString();
+  const urlWithCode = `${devicePageBase}?code=${user_code}`;
 
-  // 2. Attempt to open the browser automatically
+  // Save device_code so pollDeviceFlow can pick it up
+  writePendingDeviceCode(device_code);
+
+  // Open the browser
   try {
     const opener = process.platform === "darwin" ? "open"
       : process.platform === "win32" ? "start"
@@ -76,37 +83,94 @@ export async function loginWithDeviceFlow(repoPath: string): Promise<string> {
     // Silent — user can open manually
   }
 
-  // 3. Poll until approved or expired
-  let token: string | null = null;
-  for (let i = 0; i < MAX_POLL_ATTEMPTS; i++) {
-    await sleep(POLL_INTERVAL_MS);
+  return (
+    `I've opened your browser to ${devicePageBase}\n\n` +
+    `Confirm the code matches in the browser, then click Approve.\n\n` +
+    `Your login code: **${user_code}**`
+  );
+}
 
-    let result: PollResponse;
+/**
+ * Phase 2 — poll for approval after the user has approved in the browser.
+ * Reads the pending device_code saved by startDeviceFlow.
+ */
+export async function pollDeviceFlow(_repoPath: string): Promise<string> {
+  const device_code = readPendingDeviceCode();
+  if (!device_code) {
+    return "No login in progress. Say **\"versie login\"** to start a new one.";
+  }
+
+  for (let i = 0; i < MAX_POLL_ATTEMPTS; i++) {
+    if (i > 0) await sleep(POLL_INTERVAL_MS);
     try {
       const res = await fetch(DEVICE_AUTH_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "poll", device_code }),
       });
-      result = await res.json() as PollResponse;
+      const result = await res.json() as PollResponse;
+      if (result.status === "approved" && result.access_token) {
+        clearPendingDeviceCode();
+        writeAuthToken(result.access_token);
+        return (
+          `Connected! Your coding tool is now linked to your Versie dashboard.\n\n` +
+          `Your saves and ships will sync automatically. Say **"save my work"** to see your first project on the dashboard.`
+        );
+      }
+      if (result.status === "expired") {
+        clearPendingDeviceCode();
+        return `The code expired before it was approved. Say **"versie login"** to get a fresh one.`;
+      }
+      // Still pending — keep polling
     } catch {
-      continue; // Network blip — keep trying
+      // Network blip — keep trying
     }
-
-    if (result.status === "approved" && result.access_token) {
-      token = result.access_token;
-      break;
-    }
-    if (result.status === "expired") break;
   }
 
-  if (!token) {
-    return "Connection timed out. Say 'versie login' to try again.";
-  }
+  return (
+    `Still waiting for approval. Make sure you clicked Approve in the browser, then say **"done"** again.`
+  );
+}
 
-  // 4. Write token to global config dir
-  writeAuthToken(token);
-  return "Connected! Your projects will now sync to the dashboard after each save and ship.";
+// ── Pending device code storage ────────────────────────────────────────────────
+
+interface PendingDeviceAuth {
+  device_code: string;
+  created_at: string;
+}
+
+function pendingDeviceAuthPath(): string {
+  const configBase = process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config");
+  return join(configBase, "versie", "pending-device-auth.json");
+}
+
+function writePendingDeviceCode(device_code: string): void {
+  const authPath = pendingDeviceAuthPath();
+  const dir = join(authPath, "..");
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  writeFileSync(authPath, JSON.stringify({ device_code, created_at: new Date().toISOString() }, null, 2), "utf-8");
+}
+
+function readPendingDeviceCode(): string | null {
+  const authPath = pendingDeviceAuthPath();
+  if (!existsSync(authPath)) return null;
+  try {
+    const parsed = JSON.parse(readFileSync(authPath, "utf-8")) as PendingDeviceAuth;
+    // Discard if older than 10 minutes (edge function expiry)
+    if (Date.now() - new Date(parsed.created_at).getTime() > 10 * 60 * 1000) {
+      clearPendingDeviceCode();
+      return null;
+    }
+    return parsed.device_code ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function clearPendingDeviceCode(): void {
+  try {
+    unlinkSync(pendingDeviceAuthPath());
+  } catch { /* already gone */ }
 }
 
 /**

@@ -52,10 +52,11 @@ export async function listCommands(args: z.infer<typeof listCommandsSchema.input
     `- \`check my project health\` — Full status report\n` +
     `- \`fix this error: [message]\` — Diagnose and fix a Git error\n` +
     `- \`help with shipping setup\` — Configure Vercel/Netlify/Railway to only go live when you ship\n\n` +
-    `**Pro dashboard** (versie.co)\n` +
-    `- \`connect versie to my dashboard, my key is [key]\` — Link this project to your Versie dashboard\n` +
+    `**Dashboard** (versie.co)\n` +
+    `- \`versie login\` — Connect to the dashboard (opens browser to approve)\n` +
     `- \`disconnect versie from the dashboard\` — Remove the dashboard connection\n` +
     `- \`turn off telemetry\` — Opt out of anonymous usage data collection\n\n` +
+    `💡 These are natural language phrases — say them to me, don't run them in your terminal.\n\n` +
     `Something broken? support@versie.co`
   );
 }

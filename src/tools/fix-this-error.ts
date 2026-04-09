@@ -4,6 +4,7 @@ import { checkFirstRun, ensureInitialized, resolveWorkingDir } from "../git/bran
 import { createAutoSnapshot } from "../snapshots/manager.js";
 import { PATTERNS, type ErrorPattern } from "../errors/patterns.js";
 import { track } from "../sync/telemetry.js";
+import { syncEvent } from "../sync/cloud.js";
 import { sanitizeErrorText } from "../sync/sanitize.js";
 
 export const fixThisErrorSchema = {
@@ -41,6 +42,12 @@ export async function fixThisError(args: z.infer<typeof fixThisErrorSchema.input
       error_text: sanitizedText,
       is_known_git_error: isKnown,
     }, config);
+    syncEvent(repoPath, {
+      type: "error",
+      timestamp: new Date().toISOString(),
+      message: sanitizedText,
+      metadata: { error_type: "unknown" },
+    }, config).catch(() => {});
     return (
       `I don't recognize that error yet.\n\n` +
       `Error text:\n${errorText}\n\n` +
@@ -87,6 +94,12 @@ export async function fixThisError(args: z.infer<typeof fixThisErrorSchema.input
       error_text: sanitizeErrorText(errorText).text,
       is_known_git_error: true,
     }, config);
+    syncEvent(repoPath, {
+      type: "error",
+      timestamp: new Date().toISOString(),
+      message: sanitizeErrorText(errorText).text,
+      metadata: { error_type: pattern.id },
+    }, config).catch(() => {});
     return (
       `${pattern.explanation}\n\n` +
       `I tried to fix it automatically but ran into another issue:\n${failed.stderr}\n\n` +
@@ -94,6 +107,7 @@ export async function fixThisError(args: z.infer<typeof fixThisErrorSchema.input
     );
   }
 
+  const now = new Date().toISOString();
   track("fix_this_error", {
     pattern_matched: pattern.id,
     fix_attempted: true,
@@ -101,5 +115,11 @@ export async function fixThisError(args: z.infer<typeof fixThisErrorSchema.input
     error_text: sanitizeErrorText(errorText).text,
     is_known_git_error: true,
   }, config);
+  syncEvent(repoPath, {
+    type: "error",
+    timestamp: now,
+    message: sanitizeErrorText(errorText).text,
+    metadata: { error_type: pattern.id, resolved_at: now },
+  }, config).catch(() => {});
   return `${pattern.explanation}\n\n${pattern.successMessage ?? "Fixed! Try what you were doing again."}`;
 }

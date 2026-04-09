@@ -25,21 +25,29 @@ No Git knowledge required. No branches to manage. No commands to memorize.
 **Option A — Automatic (recommended):**
 
 ```
-npx versie-mcp --install
+npx versie-cli --install
 ```
 
-Then restart your AI tool. Versie will introduce itself the next time you open a project.
+This installs the `versie` command globally and configures your AI tool (Cursor, Claude Code, Windsurf, Claude Desktop) in one step. Restart your AI tool when it's done.
 
-**Option B — Manual:**
+**Option B — Global install:**
 
-Add one entry to your MCP client config:
+```
+npm install -g versie-cli
+```
+
+Then run `versie --install` to configure your AI tool, or add the MCP server manually (see below).
+
+**Option C — Manual MCP config:**
+
+Add this to your MCP client config if you prefer to configure it yourself:
 
 ```json
 {
   "mcpServers": {
     "versie": {
       "command": "npx",
-      "args": ["-y", "versie-mcp"]
+      "args": ["-y", "versie-cli"]
     }
   }
 }
@@ -52,7 +60,15 @@ Add one entry to your MCP client config:
 | Windsurf | Cascade → Configure MCP |
 | Claude Code | `~/.claude.json` |
 
-Then restart your AI tool.
+---
+
+## First-time setup
+
+After installing, open a project in your AI tool and say:
+
+> **"set up versie"**
+
+Versie will initialize your workspace and connect to GitHub. Your live app won't change until you explicitly ship.
 
 ---
 
@@ -74,7 +90,31 @@ Versie understands plain English. You don't need to remember exact commands.
 | *"Check my project health"* | Full status: saves, ships, any issues. |
 | *"What can Versie do?"* | See all available commands. |
 | *"Help with shipping setup"* | Configure Vercel, Netlify, Railway, or GitHub Actions. |
-| *"Set up Versie and call my workspace 'dev'"* | Use a custom name for your workspace instead of the default `versie-dev`. |
+
+---
+
+## CLI commands
+
+Versie also installs a `versie` terminal command. Your AI tool calls these automatically — but you can run them yourself too.
+
+```
+versie save [message]                 Save your current work
+versie save-and-ship [description]    Save and ship live in one step
+versie ship "<release notes>"         Ship saved work live
+versie checkpoint [name]              Create a named checkpoint to return to
+versie status                         Show what's changed since last save
+versie go-back <target>               Go back to a checkpoint
+versie timeline [limit]               Show save, checkpoint, and ship history
+versie health                         Check project setup
+versie setup [github-url]             First-time project setup
+versie login                          Connect to the Versie dashboard
+versie deploy-help [platform]         Configure Vercel, Netlify, Railway, or Render
+versie config show-git-commands on|off  Toggle showing underlying git commands
+versie config telemetry on|off        Toggle anonymous telemetry
+versie fix "error message"            Diagnose and fix a git error
+versie remove [--yes]                 Remove this project from the Versie dashboard
+versie uninstall                      Remove Versie from your AI tools
+```
 
 ---
 
@@ -101,25 +141,36 @@ You say "go back to last Tuesday"
 
 ---
 
-## Privacy & telemetry
+## How it works under the hood
 
-Versie collects anonymous usage data by default — which tools you use and whether error fixes succeed. No personal information, no file contents, no repo names. This data is used to improve error detection patterns.
+Versie is a **CLI + MCP hybrid**:
 
-To opt out, say: **"turn off telemetry"** in your AI tool. Versie stores the preference in your project.
+- **CLI (`versie` command)** — handles all mechanical operations: save, ship, go-back, checkpoint, status, setup, deploy-help, config, and more. Your AI tool calls these as bash commands, which is fast and uses very few tokens.
+- **MCP server** — handles one AI-reasoning operation: `fix_this_error` (pattern-matched error diagnosis). This stays as an MCP tool because multi-line error messages are passed reliably as structured input rather than bash arguments.
+
+Both the CLI and MCP server share the same underlying logic. Installing `versie-cli` gives you both.
 
 ---
 
-## Connecting to the Versie dashboard (Pro)
+## Connecting to the Versie dashboard
 
-If you have a Versie Pro account, you can connect the MCP server to your dashboard so your saves, ships, and checkpoints appear in the visual timeline.
+Run this in your terminal to link your projects to the Versie web dashboard:
 
-1. Sign in at [versie.co](https://versie.co) with GitHub
-2. Go to **Settings → API key** and copy your key
-3. In your AI tool, say: **"Connect Versie to my dashboard, my key is [your key]"**
+```
+versie login
+```
 
-That's it. No config files to edit, no environment variables. Versie stores the key in your project and cloud sync activates immediately.
+This opens a browser window to authenticate with your Versie account. Once approved, your saves and ships sync to the dashboard automatically.
 
-To disconnect: say **"Disconnect Versie from the dashboard"**.
+To connect from inside your AI tool, say: **"connect versie to the dashboard"** — it will run `versie login` for you.
+
+---
+
+## Privacy & telemetry
+
+Versie collects anonymous usage data by default — which commands you use and whether error fixes succeed. No personal information, no file contents, no repo names. This data is used to improve error detection patterns.
+
+To opt out, say: **"turn off telemetry"** in your AI tool.
 
 ---
 
@@ -127,25 +178,28 @@ To disconnect: say **"Disconnect Versie from the dashboard"**.
 
 | Feature | Free | Pro |
 |---------|------|-----|
-| All 12 operations | ✓ | ✓ |
+| All core operations | ✓ | ✓ |
 | Error fixing (15 patterns) | ✓ | ✓ |
 | Named checkpoints | Unlimited | Unlimited |
 | Works across sessions | ✓ | ✓ |
-| Visual timeline + one-click deploy | — | ✓ |
+| Works with any AI tool | ✓ | ✓ |
+| Visual timeline + one-click rollback | — | ✓ |
+| Deploy tracking (Vercel, GitHub Actions) | — | ✓ |
+| Ship notifications (email) | — | ✓ |
 
-Pro is a subscription — see [versie.co](https://versie.co) for current pricing and details.
+Pro is a subscription — see [versie.co](https://versie.co) for current pricing.
 
 ---
 
-## Using the MCP server and skill together
+## Using Versie with the Claude Skill
 
-Don't install both in the same tool at the same time. They do the same thing — if both are active, every operation runs twice (two saves, two ships, duplicate tags).
+Don't install both the CLI and the Claude Skill in the same tool at the same time. They do the same thing — if both are active, every operation runs twice.
 
 Pick one:
-- **MCP server** — any MCP-compatible tool, works across sessions, recommended
-- **Skill** — Claude Code or Claude Desktop only, no config needed
+- **versie-cli** — any MCP-compatible tool, works across sessions, recommended
+- **Skill** — Claude Code or Claude Desktop only, no config needed, no terminal required
 
-If you're switching from the skill, remove the `versie` folder from `.claude/skills/` before adding the MCP config.
+If you're switching from the skill, remove the `versie` folder from `.claude/skills/` before installing the CLI.
 
 ---
 
@@ -167,7 +221,7 @@ Something not working? Email [support@versie.co](mailto:support@versie.co) and w
 
 ## Disclaimer
 
-Versie is an MCP server that tells your AI tool to run standard Git commands on your behalf — the same commands any developer would run manually.
+Versie runs standard Git commands on your behalf — the same commands any developer would run manually.
 
 **You are responsible for reviewing what runs on your system.** Versie will always describe what it is about to do before doing it. Some operations — like restoring to a previous version — are destructive by design. Versie creates automatic snapshots before any destructive operation, but it is your responsibility to maintain backups of any data you cannot afford to lose.
 

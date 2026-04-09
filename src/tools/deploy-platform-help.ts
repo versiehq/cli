@@ -6,11 +6,11 @@ import { readConfig } from "../utils/config.js";
 
 export const deployPlatformHelpSchema = {
   description:
-    "Say 'help with shipping setup' to configure Vercel, Netlify, Railway, or Render " +
+    "Say 'help with shipping setup' to configure Vercel, Netlify, Railway, Render, or Supabase " +
     "to only go live when you say 'ship it', not on every save.",
   inputSchema: z.object({
     platform: z
-      .enum(["vercel", "netlify", "railway", "render", "other"])
+      .enum(["vercel", "netlify", "railway", "render", "supabase", "other"])
       .optional()
       .describe("Your shipping platform. Auto-detected from project files if not specified."),
     repo_path: z
@@ -66,6 +66,9 @@ export async function deployPlatformHelp(args: z.infer<typeof deployPlatformHelp
     case "render":
       response = renderHelp(liveBranch);
       break;
+    case "supabase":
+      response = supabaseHelp(liveBranch, detectSupabaseMode(repoPath));
+      break;
     default:
       response = genericHelp(liveBranch);
   }
@@ -73,12 +76,25 @@ export async function deployPlatformHelp(args: z.infer<typeof deployPlatformHelp
   return response + ghActionsNote;
 }
 
-function detectPlatform(repoPath: string): "vercel" | "netlify" | "railway" | "render" | "other" {
+function detectPlatform(repoPath: string): "vercel" | "netlify" | "railway" | "render" | "supabase" | "other" {
   if (existsSync(join(repoPath, "vercel.json"))) return "vercel";
   if (existsSync(join(repoPath, "netlify.toml"))) return "netlify";
   if (existsSync(join(repoPath, "railway.json"))) return "railway";
   if (existsSync(join(repoPath, "render.yaml"))) return "render";
+  if (
+    existsSync(join(repoPath, "supabase", "functions")) ||
+    existsSync(join(repoPath, "supabase", "migrations"))
+  ) return "supabase";
   return "other";
+}
+
+function detectSupabaseMode(repoPath: string): "functions" | "migrations" | "both" | "none" {
+  const hasFunctions = existsSync(join(repoPath, "supabase", "functions"));
+  const hasMigrations = existsSync(join(repoPath, "supabase", "migrations"));
+  if (hasFunctions && hasMigrations) return "both";
+  if (hasFunctions) return "functions";
+  if (hasMigrations) return "migrations";
+  return "none";
 }
 
 interface ActionsResult {
@@ -151,14 +167,17 @@ function fixBroadGithubActions(repoPath: string, liveBranch: string): ActionsRes
 function vercelHelp(liveBranch: string): string {
   return (
     `VERCEL SETUP\n\n` +
-    `Good news — Vercel protects you by default. It only goes live from '${liveBranch}', ` +
+    `PREREQUISITE — Connect your GitHub repo to Vercel\n\n` +
+    `If you haven't already:\n` +
+    `  1. Go to vercel.com → your project → Settings → Git\n` +
+    `  2. If no repo is connected, click Connect Git Repository and select your repo\n\n` +
+    `Once connected, Vercel protects you by default — it only goes live from '${liveBranch}', ` +
     `so saving your work won't touch your live app.\n\n` +
     `To double-check:\n` +
-    `  1. Go to vercel.com → your project\n` +
-    `  2. Click Settings → Environments\n` +
-    `  3. Under Production, make sure the branch is set to '${liveBranch}'\n\n` +
+    `  1. Go to vercel.com → your project → Settings → Git\n` +
+    `  2. Under Production Branch, make sure it's set to '${liveBranch}'\n\n` +
     `Preview builds on versie-dev are harmless — private previews only, no effect on your live app.\n\n` +
-    `**Optional:** To stop preview builds on versie-dev (saves build minutes):\n` +
+    `Optional — stop preview builds on versie-dev (saves build minutes):\n` +
     `  1. Go to vercel.com → your project → Settings → Build and Deployment\n` +
     `  2. Scroll to Ignored Build Step → select Custom and enter:\n` +
     `     if [ "$VERCEL_GIT_COMMIT_REF" == "versie-dev" ]; then exit 0; else exit 1; fi\n` +
@@ -202,6 +221,77 @@ function renderHelp(liveBranch: string): string {
   );
 }
 
+function supabaseHelp(liveBranch: string, mode: "functions" | "migrations" | "both" | "none"): string {
+  const hasMigrations = mode === "migrations" || mode === "both";
+  const hasFunctions = mode === "functions" || mode === "both";
+
+  const migrationsJob =
+    `  migrate:\n` +
+    `    runs-on: ubuntu-latest\n` +
+    `    steps:\n` +
+    `      - uses: actions/checkout@v4\n` +
+    `      - uses: supabase/setup-cli@v1\n` +
+    `        with:\n` +
+    `          version: latest\n` +
+    `      - run: supabase db push\n` +
+    `        env:\n` +
+    `          SUPABASE_ACCESS_TOKEN: \${{ secrets.SUPABASE_ACCESS_TOKEN }}\n` +
+    `          SUPABASE_DB_PASSWORD: \${{ secrets.SUPABASE_DB_PASSWORD }}\n`;
+
+  const functionsJob =
+    `  deploy-functions:\n` +
+    `    runs-on: ubuntu-latest\n` +
+    `    steps:\n` +
+    `      - uses: actions/checkout@v4\n` +
+    `      - uses: supabase/setup-cli@v1\n` +
+    `        with:\n` +
+    `          version: latest\n` +
+    `      - run: supabase functions deploy\n` +
+    `        env:\n` +
+    `          SUPABASE_ACCESS_TOKEN: \${{ secrets.SUPABASE_ACCESS_TOKEN }}\n`;
+
+  const workflowName = mode === "both" ? "Supabase" : hasMigrations ? "Supabase Migrations" : "Supabase Edge Functions";
+  const fileName = mode === "both" ? "supabase.yml" : hasMigrations ? "supabase-migrations.yml" : "supabase-functions.yml";
+  const jobs = [hasMigrations ? migrationsJob : "", hasFunctions ? functionsJob : ""].filter(Boolean).join("\n");
+
+  const secretsNeeded = [
+    `  1. Go to github.com → your repo → Settings → Secrets and variables → Actions`,
+    `  2. Add SUPABASE_ACCESS_TOKEN — find this at supabase.com → Account → Access Tokens`,
+    hasMigrations ? `  3. Add SUPABASE_DB_PASSWORD — find this at supabase.com → your project → Settings → Database → Database password` : "",
+  ].filter(Boolean).join("\n");
+
+  const whatItDoes = mode === "both"
+    ? `your migrations will run and your edge functions will deploy automatically`
+    : hasMigrations
+    ? `your migrations will run automatically`
+    : `your edge functions will deploy automatically`;
+
+  return (
+    `SUPABASE SETUP\n\n` +
+    `Your Supabase ${mode === "both" ? "migrations and edge functions" : hasMigrations ? "migrations" : "edge functions"} ` +
+    `don't ship automatically — you need a GitHub Actions workflow to run them when you say "ship it".\n\n` +
+    `STEP 1 — Create the workflow file\n\n` +
+    `Create this file in your project:\n` +
+    `  .github/workflows/${fileName}\n\n` +
+    `Paste this content:\n\n` +
+    `name: ${workflowName}\n` +
+    `on:\n` +
+    `  push:\n` +
+    `    branches:\n` +
+    `      - ${liveBranch}\n\n` +
+    `jobs:\n` +
+    jobs + `\n` +
+    `STEP 2 — Add your Supabase secrets to GitHub\n\n` +
+    secretsNeeded + `\n\n` +
+    `STEP 3 — Link your project (first time only)\n\n` +
+    `If you haven't already, run this in your terminal once:\n` +
+    `  supabase link --project-ref <your-project-ref>\n\n` +
+    `Your project ref is in the URL: supabase.com/dashboard/project/<ref>\n\n` +
+    `Once set up, every time you say "ship it", ${whatItDoes} ` +
+    `and the result will show up in your Versie dashboard under deploy tracking.`
+  );
+}
+
 function genericHelp(liveBranch: string): string {
   return (
     `SHIPPING SETUP\n\n` +
@@ -214,7 +304,8 @@ function genericHelp(liveBranch: string): string {
     `  • Vercel → Project Settings → Git → Production Branch\n` +
     `  • Netlify → Site configuration → Build & deploy → Branches\n` +
     `  • Railway → Service Settings → Source → Branch\n` +
-    `  • Render → Service Settings → Build & Deploy\n\n` +
+    `  • Render → Service Settings → Build & Deploy\n` +
+    `  • Supabase → GitHub Actions workflow (say 'help with supabase setup' for a ready-to-paste workflow)\n\n` +
     `Tell me which platform you use and I'll give you exact steps.`
   );
 }

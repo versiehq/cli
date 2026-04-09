@@ -9,7 +9,7 @@ import { git } from "../git/executor.js";
 import { readAuthToken } from "../auth/device-flow.js";
 import type { VersieConfig } from "../utils/config.js";
 
-const DEFAULT_API_URL = "https://versie.co/api";
+const DEFAULT_API_URL = "https://www.versie.co/api";
 const TIMEOUT_MS = 5_000;
 
 export type CloudEventType = "save" | "deploy" | "rollback" | "checkpoint" | "error" | "health_check";

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from "fs";
 import { dirname, join, resolve, sep } from "path";
 import { homedir } from "os";
 
@@ -35,7 +35,7 @@ function buildVersieEntry(): { command: string; args: string[] } {
   // Fall back to bare "npx" only if the sibling binary doesn't exist
   // (e.g. unusual global install layouts).
   const command = existsSync(npxPath) ? npxPath : "npx";
-  return { command, args: ["-y", "versie-mcp"] };
+  return { command, args: ["-y", "versie-cli"] };
 }
 
 function getToolConfigs(): ToolConfig[] {
@@ -147,12 +147,27 @@ function installGlobalCursorRules(): void {
   const cursorRulesDir = join(home, ".cursor", "rules");
   const cursorRulesPath = join(cursorRulesDir, "versie.mdc");
   const content = `---
-description: Versie MCP tools are available for version control
+description: Versie is available for version control via CLI and MCP
 globs:
 alwaysApply: true
 ---
-When the user asks to save, ship, check health, view timeline, or do any version control operation, use the Versie MCP tools.
-Always determine the current workspace/project folder path from context and pass it as repo_path. Never ask the user for the path.
+Versie handles version control. Use bash commands for all mechanical operations — run them from the project directory.
+
+CLI commands:
+- \`versie save ["message"]\` — save current work
+- \`versie ship ["release notes"]\` — ship live
+- \`versie checkpoint ["name"]\` — create a named checkpoint
+- \`versie status\` — see what's changed
+- \`versie go-back <target>\` — return to a checkpoint by name
+- \`versie setup [github-url]\` — first-time project setup
+- \`versie login\` — connect to the Versie dashboard
+- \`versie fix "error text"\` — diagnose and fix a git error
+
+MCP tools (use when user pastes something in chat):
+- fix_this_error — preferred when the user shares an error message in chat
+- check_health — when the user asks for a health check or shares a GitHub SSH URL
+
+Never ask the user for the project path — determine it from the open file or workspace context.
 `;
   if (existsSync(cursorRulesPath) && readFileSync(cursorRulesPath, "utf-8") === content) return;
   mkdirSync(cursorRulesDir, { recursive: true });
@@ -185,7 +200,7 @@ export function runInstaller(): void {
     console.log("No supported AI tools found.\n");
     const entry = buildVersieEntry();
     console.log(
-      `Add Versie manually by putting this in your tool's MCP config:\n  "versie": { "command": "${entry.command}", "args": ["-y", "versie-mcp"] }\n`
+      `Add Versie manually by putting this in your tool's MCP config:\n  "versie": { "command": "${entry.command}", "args": ["-y", "versie-cli"] }\n`
     );
     console.log(
       "Supported tools: Claude Desktop, Cursor, Windsurf, Claude Code\nNeed help? support@versie.co"
@@ -229,5 +244,87 @@ export function runInstaller(): void {
     );
   } else if (alreadyInstalled.length > 0 && installed.length === 0) {
     console.log('Versie is already set up. Open a project and say "save my work" to get started.');
+  }
+}
+
+function removeFromConfig(tool: ToolConfig): "removed" | "not_installed" | "error" {
+  if (!existsSync(tool.configPath)) return "not_installed";
+
+  let config: Record<string, unknown>;
+  try {
+    config = JSON.parse(readFileSync(tool.configPath, "utf-8")) as Record<string, unknown>;
+  } catch {
+    return "error";
+  }
+
+  const mcpServers = config["mcpServers"] as Record<string, unknown> | undefined;
+  if (!mcpServers?.["versie"]) return "not_installed";
+
+  delete mcpServers["versie"];
+  if (Object.keys(mcpServers).length === 0) {
+    delete config["mcpServers"];
+  } else {
+    config["mcpServers"] = mcpServers;
+  }
+
+  try {
+    writeFileSync(tool.configPath, JSON.stringify(config, null, 2) + "\n", "utf-8");
+    return "removed";
+  } catch {
+    return "error";
+  }
+}
+
+export function runUninstaller(): void {
+  const tools = getToolConfigs();
+  const removed: string[] = [];
+  const errors: string[] = [];
+
+  for (const tool of tools) {
+    const result = removeFromConfig(tool);
+    if (result === "removed") removed.push(tool.name);
+    else if (result === "error") errors.push(tool.name);
+  }
+
+  // Remove Cursor rules
+  const cursorRulesPath = join(homedir(), ".cursor", "rules", "versie.mdc");
+  try {
+    if (existsSync(cursorRulesPath)) unlinkSync(cursorRulesPath);
+  } catch { /* best effort */ }
+
+  // Remove auth token
+  const configBase = process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config");
+  const authPath = join(configBase, "versie", "auth.json");
+  let removedAuth = false;
+  try {
+    if (existsSync(authPath)) {
+      unlinkSync(authPath);
+      removedAuth = true;
+    }
+  } catch { /* best effort */ }
+
+  console.log("Versie uninstaller\n");
+
+  if (removed.length > 0) {
+    console.log("Removed from:");
+    for (const name of removed) console.log(`  ✓ ${name}`);
+    console.log("");
+  }
+
+  if (errors.length > 0) {
+    console.log("Could not update config (check these files manually):");
+    for (const name of errors) console.log(`  ✗ ${name}`);
+    console.log("");
+  }
+
+  if (removedAuth) console.log("✓ Signed out\n");
+
+  if (removed.length === 0 && errors.length === 0 && !removedAuth) {
+    console.log("Nothing to remove — Versie wasn't installed in any detected AI tool.\n");
+  }
+
+  console.log("To finish, run:\n  npm uninstall -g versie-cli");
+  if (removed.length > 0) {
+    console.log("\nRestart your AI tools to complete removal.");
   }
 }

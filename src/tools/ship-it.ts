@@ -16,6 +16,15 @@ export const shipItSchema = {
       .string()
       .optional()
       .describe("REQUIRED. Always set this to the absolute path of the current workspace folder — never omit it. The MCP server cannot determine the project path on its own."),
+    release_notes: z
+      .string()
+      .optional()
+      .describe(
+        "Plain-language summary of what is being shipped in this release. " +
+        "Write 1–3 sentences describing what users will see or experience — no technical jargon, no file names, no git terminology. " +
+        "Base this ONLY on the actual saves being shipped (what the user asked you to build or fix in this session). " +
+        "Max 300 characters. Omit if you have no meaningful context about what changed."
+      ),
   }),
 };
 
@@ -278,6 +287,7 @@ export async function shipIt(args: z.infer<typeof shipItSchema.inputSchema>): Pr
   track("ship_it", { type: "forward", changes: gap.count }, config);
   const deployHashResult = await git(["rev-parse", config.liveBranch], repoPath);
   const deployTargets = await detectDeployTargets(repoPath);
+  const releaseNotes = args.release_notes?.trim().slice(0, 300) || undefined;
   syncEvent(repoPath, {
     type: "deploy",
     timestamp: new Date().toISOString(),
@@ -287,6 +297,7 @@ export async function shipIt(args: z.infer<typeof shipItSchema.inputSchema>): Pr
     metadata: {
       release_tag: releaseTag,
       change_count: gap.count,
+      ...(releaseNotes ? { release_notes: releaseNotes } : {}),
       ...(deployTargets.length > 0 ? { deploy_targets: deployTargets } : {}),
     },
   }, config);

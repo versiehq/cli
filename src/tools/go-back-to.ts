@@ -109,8 +109,23 @@ export async function goBackTo(args: z.infer<typeof goBackToSchema.inputSchema>)
 
   // Case 1: Restore versie-dev to match the live branch
   if (LIVE_PATTERNS.test(target)) {
+    // Fetch before resetting — dashboard rollbacks update origin/main directly,
+    // leaving local main stale. Always reset to origin/liveBranch, not local ref.
+    const fetchResult = await git(["fetch", "origin", config.liveBranch], repoPath);
+    const liveRef = fetchResult.exitCode === 0
+      ? `origin/${config.liveBranch}`
+      : config.liveBranch;
+
+    // Keep local live branch in sync with remote
+    if (fetchResult.exitCode === 0) {
+      await git(
+        ["update-ref", `refs/heads/${config.liveBranch}`, `origin/${config.liveBranch}`],
+        repoPath
+      );
+    }
+
     await git(["checkout", config.devBranch], repoPath);
-    await git(["reset", "--hard", config.liveBranch], repoPath);
+    await git(["reset", "--hard", liveRef], repoPath);
     const pushResult = await git(
       ["push", "--force-with-lease", "origin", config.devBranch],
       repoPath
@@ -119,7 +134,7 @@ export async function goBackTo(args: z.infer<typeof goBackToSchema.inputSchema>)
       // Local-only repo or push failed — still report success locally
     }
 
-    const gitNote = config.showGitCommands ? `\n\`\`\`\ngit reset --hard ${config.liveBranch}\ngit push --force-with-lease origin ${config.devBranch}\n\`\`\`` : "";
+    const gitNote = config.showGitCommands ? `\n\`\`\`\ngit fetch origin ${config.liveBranch}\ngit reset --hard ${liveRef}\ngit push --force-with-lease origin ${config.devBranch}\n\`\`\`` : "";
     track("go_back_to", { target: "live" }, config);
     return (
       `Restored to the live version. Your workspace now matches what's live.` +

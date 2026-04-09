@@ -15,6 +15,7 @@ const SETUP_COMPLETE_MESSAGE =
   `Say **"save my work"** to save, **"ship it"** to go live, or **"list commands"** to see all options.\n\n` +
   `Before your first ship: if you have your GitHub repo connected to Vercel, Netlify, or another platform, ` +
   `say **"help with shipping setup"** so only "ship it" triggers live deployments — not every save.\n\n` +
+  `**Want your ship history on the dashboard?** If you haven't already, run **\`versie login\`** in your terminal or AI tool to connect this project to versie.co.\n\n` +
   `Versie collects anonymous usage data to help improve error detection. Say **"turn off telemetry"** anytime to opt out.`;
 
 /**

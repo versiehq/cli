@@ -14,7 +14,7 @@ export const saveMyWorkSchema = {
     description: z
       .string()
       .optional()
-      .describe("ALWAYS provide this. Describe the code change itself — what was built, fixed, or changed — not the act of saving. One sentence, past tense. Think: what would a developer write as a git commit message? Good: 'Added dark mode to profile menu', 'Fixed mobile nav overflow on small screens', 'Switched timeline font to serif'. Bad: 'Saved current progress', 'Updated project files', 'Made some changes', 'Updated 2 files', 'No new changes', 'No changes since last save'. The message must describe what changed, not how many files or that a save occurred."),
+      .describe("Describe WHAT was built, fixed, or changed — not WHICH files changed. One sentence, past tense. ONLY provide this if you have read the actual git diff or file changes in this conversation and can describe the functional change. Do NOT guess or use project context — if you haven't seen the diff, omit this entirely and the tool will auto-generate from git status. Good: 'Added dark mode to profile menu', 'Fixed mobile nav overflow on small screens', 'Built Supabase todo app with add and toggle done'. Bad: 'Updated index.html', 'Added App.tsx', 'Modified styles.css', 'Updated project files', 'Made some changes', 'Updated 2 files' — never name a file as the description."),
     body: z
       .string()
       .optional()
@@ -126,13 +126,17 @@ const WEAK_DESC_PATTERNS = [
   /already saved/i,
   /nothing new/i,
   /no updates/i,
-  // Generic auto-generated-style messages
+  // Generic auto-generated-style messages (file counts)
   /^updated? \d+ files?\.?$/i,
   /^added \d+ files?\.?$/i,
   /^deleted \d+ files?\.?$/i,
   /^updated? project files?\.?$/i,
   /^saved( (current )?progress)?\.?$/i,
   /^made (some )?changes?\.?$/i,
+  // Single-filename descriptions — LLM naming files instead of describing what changed.
+  // Match: "Updated index.html", "Added App.tsx", "Modified styles.css", "Deleted utils.js"
+  // A file extension is the reliable signal — legitimate descriptions don't end in .ext
+  /^(updated?|modified?|changed?|edited?|created?|added|deleted?|removed?)\s+\S+\.\w{1,10}\.?$/i,
 ];
 
 function isWeakDescription(desc: string | undefined): boolean {
@@ -166,35 +170,74 @@ function generateMessage(porcelain: string): string {
   const added: string[] = [];
   const modified: string[] = [];
   const deleted: string[] = [];
+  const paths: string[] = []; // full relative paths for directory inference
 
   for (const line of lines) {
     const xy = line.slice(0, 2);
-    // Porcelain v1: "XY filename" or "XY old -> new" (rename). Use regex to avoid
-    // off-by-one if the filename starts with a letter that looks like a status char.
     const rest = line.match(/^.{2} (.+)$/)?.[1] ?? line.slice(3);
-    const file = (rest.includes(" -> ") ? rest.split(" -> ").pop()! : rest).split("/").pop() ?? "file";
+    const fullPath = rest.includes(" -> ") ? rest.split(" -> ").pop()! : rest;
+    paths.push(fullPath);
+    const file = fullPath.split("/").pop() ?? "file";
     if (xy.includes("D")) deleted.push(file);
     else if (xy === "??" || xy.includes("A")) added.push(file);
     else modified.push(file);
   }
 
-  // Single file — be specific
+  // Single file — name it
   if (lines.length === 1) {
     if (added.length)    return `Added ${added[0]}`;
     if (deleted.length)  return `Deleted ${deleted[0]}`;
     if (modified.length) return `Updated ${modified[0]}`;
   }
 
-  // Multiple files — lead with the dominant change type
+  // Multiple files — try to describe by area rather than raw counts
+  const area = inferArea(paths);
+
   if (added.length > 0 && modified.length === 0 && deleted.length === 0) {
-    return added.length === 1 ? `Added ${added[0]}` : `Added ${added.length} files`;
+    if (added.length === 1) return `Added ${added[0]}`;
+    return area ? `Added ${area}` : `Added ${added.length} files`;
   }
   if (deleted.length > 0 && added.length === 0 && modified.length === 0) {
-    return deleted.length === 1 ? `Deleted ${deleted[0]}` : `Deleted ${deleted.length} files`;
+    if (deleted.length === 1) return `Deleted ${deleted[0]}`;
+    return area ? `Removed ${area}` : `Deleted ${deleted.length} files`;
   }
-  if (added.length > 0 && modified.length > 0) {
-    return `Added ${added[0]} and updated ${modified.length} file${modified.length === 1 ? "" : "s"}`;
+  if (added.length > 0 && modified.length > 0 && deleted.length === 0) {
+    return area ? `Built out ${area}` : `Added ${added[0]} and updated ${modified.length} file${modified.length === 1 ? "" : "s"}`;
   }
 
-  return `Updated ${lines.length} files`;
+  return area ? `Updated ${area}` : `Updated ${lines.length} files`;
+}
+
+/**
+ * Infer a human-readable area label from a list of file paths.
+ * Returns a label like "auth flow", "components", "styles" or null if no
+ * clear area can be determined.
+ */
+function inferArea(paths: string[]): string | null {
+  if (paths.length === 0) return null;
+
+  // All files share a common directory — use its name
+  const dirs = paths.map(p => {
+    const parts = p.split("/");
+    return parts.length > 1 ? parts[parts.length - 2] : null;
+  });
+  const uniqueDirs = [...new Set(dirs.filter(Boolean))];
+  if (uniqueDirs.length === 1 && uniqueDirs[0]) {
+    const dir = uniqueDirs[0].toLowerCase();
+    // Skip uninformative top-level names
+    if (!["src", "app", ".", "public", "static", "dist", "build"].includes(dir)) {
+      return dir.replace(/[-_]/g, " ");
+    }
+  }
+
+  // Infer from file extensions
+  const exts = paths.map(p => p.split(".").pop()?.toLowerCase() ?? "");
+  const allStyles = exts.every(e => ["css", "scss", "sass", "less"].includes(e));
+  if (allStyles) return "styles";
+  const allComponents = exts.every(e => ["tsx", "jsx"].includes(e));
+  if (allComponents) return "components";
+  const allConfig = exts.every(e => ["json", "yaml", "yml", "toml", "env"].includes(e));
+  if (allConfig) return "config";
+
+  return null;
 }
