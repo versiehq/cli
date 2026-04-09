@@ -14,7 +14,7 @@ export const saveMyWorkSchema = {
     description: z
       .string()
       .optional()
-      .describe("Describe WHAT was built, fixed, or changed — not WHICH files changed. One sentence, past tense. ONLY provide this if you have read the actual git diff or file changes in this conversation and can describe the functional change. Do NOT guess or use project context — if you haven't seen the diff, omit this entirely and the tool will auto-generate from git status. Good: 'Added dark mode to profile menu', 'Fixed mobile nav overflow on small screens', 'Built Supabase todo app with add and toggle done'. Bad: 'Updated index.html', 'Added App.tsx', 'Modified styles.css', 'Updated project files', 'Made some changes', 'Updated 2 files' — never name a file as the description."),
+      .describe("60 characters max. Describe WHAT changed functionally — what was built, fixed, or removed. One sentence, past tense. Read the diff or the user's request before writing this. NEVER name a file ('Updated index.html' is always wrong). If you genuinely don't know what changed, omit this and the tool will ask you to describe it."),
     body: z
       .string()
       .optional()
@@ -42,14 +42,21 @@ export async function saveMyWork(args: z.infer<typeof saveMyWorkSchema.inputSche
   // Stage all changes
   await git(["add", "-A"], repoPath);
 
-  // Resolve the best available description, with two server-side guards:
-  // 1. Reject "no changes" descriptions (LLM confusion) and generic auto-generated-style
-  //    messages ("Updated 2 files") — fall back to auto-generate from git status.
+  // Resolve the best available description:
+  // 1. Reject weak/filename-based descriptions — fall back to auto-generate from git status.
   // 2. If body was provided but description is missing/rejected, promote the first body
   //    line as the title (LLM sometimes puts the real description in body only).
+  // 3. If auto-generate is also weak (e.g. single file — "Updated index.html"), ask the AI
+  //    to describe the change rather than saving with a meaningless message.
   const rawDesc = isWeakDescription(args.description) ? undefined : args.description;
   const description = rawDesc ?? extractTitleFromBody(args.body);
-  const message = description || generateMessage(statusResult.stdout);
+  const generated = description ?? generateMessage(statusResult.stdout);
+  if (isWeakDescription(generated)) {
+    const fileList = statusResult.stdout.split("\n").filter(Boolean)
+      .slice(0, 3).map(l => l.slice(3).trim()).join(", ");
+    return `Describe this change in 60 characters or less, then say 'save my work' again with that description.\n\nFiles changed: ${fileList}\n\nExample: "Added login button", "Fixed mobile nav overflow"`;
+  }
+  const message = generated;
   const commitMessage = args.body ? `${message}\n\n${args.body}` : message;
 
   // Commit
@@ -107,7 +114,7 @@ export async function saveMyWork(args: z.infer<typeof saveMyWorkSchema.inputSche
       ...(files.length ? { files } : {}),
     },
   }, config);
-  sendHeartbeat(repoPath, "save");
+  sendHeartbeat(repoPath, "save", config);
   return `Saved! ${message}. (Your live app wasn't affected.)${gapNote}${worktreeNote}${gitNote}`;
 }
 

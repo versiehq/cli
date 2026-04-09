@@ -13,7 +13,7 @@ const server = new McpServer(
       "Commands: " +
       "'versie save [\"message\"]' (save work), " +
       "'versie save-and-ship [\"description\"]' (save and go live in one step), " +
-      "'versie ship \"<release notes>\"' (ship live — always pass a plain-English summary of what was built or fixed, e.g. versie ship \"Added login page and fixed signup bug\"), " +
+      "'versie ship [\"release notes\"]' (ship live — ONLY pass release notes if you have read the actual code changes or the user described what was built; omit otherwise and the tool auto-generates from recent saves; NEVER pass generic phrases like 'Latest changes', 'Updated files', 'Minor updates'), " +
       "'versie checkpoint [\"name\"]' (create checkpoint), " +
       "'versie status' (what's changed), " +
       "'versie go-back <target>' (return to checkpoint by name), " +

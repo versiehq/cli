@@ -1,4 +1,4 @@
-# Versie — Git made invisible for vibe coders
+# Versie — Git made invisible for non-technical builders
 
 You're building with Cursor, Windsurf, Claude, or any AI coding tool. Your tool keeps mentioning Git. You don't know what any of it means and you just want to build.
 
@@ -8,7 +8,7 @@ Versie handles all of it for you.
 
 ## The idea
 
-Most vibe coders push straight to their live app every time they save. That means every experiment, every half-finished feature, every broken change goes live immediately. One bad save and your app is down.
+Most non-technical builders push straight to their live app every time they save. That means every experiment, every half-finished feature, every broken change goes live immediately. One bad save and your app is down.
 
 Versie separates your work from what's live:
 
@@ -170,7 +170,7 @@ To connect from inside your AI tool, say: **"connect versie to the dashboard"** 
 
 Versie collects anonymous usage data by default — which commands you use and whether error fixes succeed. No personal information, no file contents, no repo names. This data is used to improve error detection patterns.
 
-To opt out, say: **"turn off telemetry"** in your AI tool.
+To opt out per project, say: **"turn off telemetry"** in your AI tool. To opt out globally across all projects, set `VERSIE_TELEMETRY=false` in your environment.
 
 ---
 

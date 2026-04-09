@@ -135,7 +135,7 @@ export async function projectTimeline(args: z.infer<typeof projectTimelineSchema
     ? `\nShowing your last ${limit} events. Say 'show more' for earlier history.`
     : "";
 
-  return `YOUR TIMELINE\n─────────────\n\n${entryLines}\n\n○ saved (workspace)  ★ checkpoint (workspace)  ● shipped live${footer}`;
+  return `YOUR TIMELINE\n─────────────\n○ saved (workspace)  ★ checkpoint (workspace)  ● shipped live\n\n${entryLines}${footer}`;
 }
 
 const PLATFORM_LABELS: Record<string, string> = {

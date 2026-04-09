@@ -20,10 +20,12 @@ export const shipItSchema = {
       .string()
       .optional()
       .describe(
-        "Plain-language summary of what is being shipped in this release. " +
-        "Write 1–3 sentences describing what users will see or experience — no technical jargon, no file names, no git terminology. " +
-        "Base this ONLY on the actual saves being shipped (what the user asked you to build or fix in this session). " +
-        "Max 300 characters. Omit if you have no meaningful context about what changed."
+        "Plain-language summary of what is being shipped. " +
+        "ONLY provide this if you have read the actual code changes or the user described what was built. " +
+        "Describe what users will see or experience — no file names, no git terms. " +
+        "Good: 'Added dark mode toggle', 'Fixed checkout bug on mobile'. " +
+        "Bad: 'Latest changes', 'Updated files', 'Minor updates'. " +
+        "If you haven't seen the actual changes, OMIT THIS — the tool will generate notes from the saves being shipped."
       ),
   }),
 };
@@ -287,7 +289,10 @@ export async function shipIt(args: z.infer<typeof shipItSchema.inputSchema>): Pr
   track("ship_it", { type: "forward", changes: gap.count }, config);
   const deployHashResult = await git(["rev-parse", config.liveBranch], repoPath);
   const deployTargets = await detectDeployTargets(repoPath);
-  const releaseNotes = args.release_notes?.trim().slice(0, 300) || undefined;
+  const rawNotes = args.release_notes?.trim();
+  const releaseNotes = !isWeakReleaseNote(rawNotes)
+    ? rawNotes!.slice(0, 300)
+    : gap.summaries.length > 0 ? gap.summaries.slice(0, 3).join("; ").slice(0, 300) : undefined;
   syncEvent(repoPath, {
     type: "deploy",
     timestamp: new Date().toISOString(),
@@ -301,6 +306,24 @@ export async function shipIt(args: z.infer<typeof shipItSchema.inputSchema>): Pr
       ...(deployTargets.length > 0 ? { deploy_targets: deployTargets } : {}),
     },
   }, config);
-  sendHeartbeat(repoPath, "ship");
+  sendHeartbeat(repoPath, "ship", config);
   return `Shipped! ${changeCount} live${summary}. (${releaseTag})${gitNote}${unsavedNote}`;
+}
+
+const WEAK_RELEASE_PATTERNS = [
+  /^latest changes?\.?$/i,
+  /^(updated?|modified?|changed?|edited?) (files?|code|project|stuff|things?|everything)\.?$/i,
+  /^(made? )?(some )?changes?\.?$/i,
+  /^(minor )?updates?\.?$/i,
+  /^(new )?release\.?$/i,
+  /^shipped?\.?$/i,
+  /^(various|misc(ellaneous)?) (changes?|updates?|fixes?)\.?$/i,
+  /^(bug )?fixes?\.?$/i,
+  /^improvements?\.?$/i,
+  /^(updated?|modified?|changed?|edited?|created?|added|deleted?|removed?)\s+\S+\.\w{1,10}\.?$/i,
+];
+
+function isWeakReleaseNote(note: string | undefined): boolean {
+  if (!note?.trim()) return true;
+  return WEAK_RELEASE_PATTERNS.some((p) => p.test(note.trim()));
 }

@@ -1,7 +1,7 @@
 {
   "name": "versie-cli",
-  "version": "1.4.0-rc.1",
-  "description": "Plain-language version control and deploy safety for AI-powered builders",
+  "version": "1.4.0",
+  "description": "Git made invisible for non-technical builders",
   "type": "module",
   "bin": {
     "versie": "./build/cli.js"
@@ -34,7 +34,7 @@
     "mcp",
     "git",
     "versie",
-    "vibe-coding"
+    "non-technical"
   ],
   "license": "AGPL-3.0",
   "repository": {

@@ -8,17 +8,21 @@
 
 import { createHash } from "node:crypto";
 import { git } from "../git/executor.js";
+import type { VersieConfig } from "../utils/config.js";
 
-const HEARTBEAT_URL = "https://versie.co/api/heartbeat";
+const HEARTBEAT_URL = "https://www.versie.co/api/heartbeat";
 const TIMEOUT_MS = 3_000;
 
 export type HeartbeatEventType = "save" | "ship";
 
 /**
  * Send a heartbeat for the given repo and event type.
- * No-ops silently if the repo has no remote URL.
+ * No-ops silently if the repo has no remote URL or if telemetry is disabled.
  */
-export async function sendHeartbeat(repoPath: string, eventType: HeartbeatEventType): Promise<void> {
+export async function sendHeartbeat(repoPath: string, eventType: HeartbeatEventType, config?: VersieConfig): Promise<void> {
+  // Respect telemetry opt-out — same flags as PostHog telemetry
+  if (process.env.VERSIE_TELEMETRY === "false") return;
+  if (config?.telemetry === false) return;
   try {
     const remoteResult = await git(["remote", "get-url", "origin"], repoPath);
     const remoteUrl = remoteResult.stdout.trim();
