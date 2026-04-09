@@ -39,10 +39,10 @@
   "license": "AGPL-3.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/versiehq/mcp.git"
+    "url": "https://github.com/versiehq/cli.git"
   },
   "bugs": {
-    "url": "https://github.com/versiehq/mcp/issues"
+    "url": "https://github.com/versiehq/cli/issues"
   },
-  "homepage": "https://github.com/versiehq/mcp#readme"
+  "homepage": "https://github.com/versiehq/cli#readme"
 }
