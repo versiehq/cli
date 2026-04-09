@@ -30,13 +30,14 @@ npx versie-cli --install
 
 This installs the `versie` command globally and configures your AI tool (Cursor, Claude Code, Windsurf, Claude Desktop) in one step. Restart your AI tool when it's done.
 
-**Option B — Global install:**
+**Option B — Two steps:**
 
 ```
 npm install -g versie-cli
+versie --install
 ```
 
-Then run `versie --install` to configure your AI tool, or add the MCP server manually (see below).
+Then restart your AI tool.
 
 **Option C — Manual MCP config:**
 
@@ -52,6 +53,8 @@ Add this to your MCP client config if you prefer to configure it yourself:
   }
 }
 ```
+
+> **Note for nvm users:** If your AI tool launches with a minimal PATH (Claude Desktop, Cursor, Windsurf), replace `"npx"` with the full path to your npx binary — e.g. `/Users/you/.nvm/versions/node/v20.0.0/bin/npx`. Run `which npx` in your terminal to find it.
 
 | Tool | Config file location |
 |------|---------------------|

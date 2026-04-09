@@ -1,10 +1,11 @@
 {
   "name": "versie-cli",
-  "version": "1.4.4",
+  "version": "1.4.7",
   "description": "Git made invisible for non-technical builders",
   "type": "module",
   "bin": {
-    "versie": "./build/cli.js"
+    "versie": "./build/cli.js",
+    "versie-cli": "./build/index.js"
   },
   "scripts": {
     "build": "tsc && chmod 755 build/index.js",

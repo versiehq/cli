@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from "fs";
+import { execFileSync } from "child_process";
 import { dirname, join, resolve, sep } from "path";
 import { homedir } from "os";
 
@@ -31,19 +32,11 @@ interface ToolConfig {
  * active, the correct absolute path gets written.
  */
 function buildVersieEntry(): { command: string; args: string[] } {
-  // GUI apps (Claude Desktop, Cursor, Windsurf) launch subprocesses with a
-  // minimal PATH that excludes nvm/fnm paths. Using npx directly fails because
-  // npx's shebang (#!/usr/bin/env node) resolves to the system Node via PATH.
-  //
-  // Fix: use the absolute node binary as the command, then pass the absolute
-  // npx path as the first argument. This bypasses shebang resolution entirely.
-  const nodePath = process.execPath; // absolute path, e.g. /.../.nvm/.../bin/node
-  const npxPath = join(dirname(nodePath), "npx");
-  if (existsSync(npxPath)) {
-    return { command: nodePath, args: [npxPath, "-y", "versie-cli"] };
-  }
-  // Fallback for unusual installs where npx isn't alongside node
-  return { command: "npx", args: ["-y", "versie-cli"] };
+  const npxPath = join(dirname(process.execPath), "npx");
+  // Fall back to bare "npx" only if the sibling binary doesn't exist
+  // (e.g. unusual global install layouts).
+  const command = existsSync(npxPath) ? npxPath : "npx";
+  return { command, args: ["-y", "versie-cli"] };
 }
 
 function getToolConfigs(): ToolConfig[] {
@@ -244,6 +237,22 @@ export function runInstaller(): void {
 
   if (notFound.length > 0) {
     console.log(`Not found:\n  ${notFound.join(", ")}\n`);
+  }
+
+  // Ensure the `versie` CLI command is available globally
+  const npmPath = join(dirname(process.execPath), "npm");
+  const npm = existsSync(npmPath) ? npmPath : "npm";
+  const versieGlobalPath = join(dirname(process.execPath), "versie");
+  const alreadyGlobal = existsSync(versieGlobalPath);
+
+  if (!alreadyGlobal) {
+    console.log("Installing versie command globally...");
+    try {
+      execFileSync(npm, ["install", "-g", "versie-cli"], { stdio: "inherit" });
+      console.log("");
+    } catch {
+      console.log("Couldn't install globally — run `npm install -g versie-cli` to finish setup.\n");
+    }
   }
 
   if (installed.length > 0) {

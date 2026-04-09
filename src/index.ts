@@ -1,4 +1,12 @@
 #!/usr/bin/env node
+
+// Handle installer invocation: `npx versie-cli --install`
+if (process.argv[2] === "--install" || process.argv[2] === "install") {
+  const { runInstaller } = await import("./install.js");
+  runInstaller();
+  process.exit(0);
+}
+
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { logger } from "./utils/logger.js";
