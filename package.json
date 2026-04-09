@@ -1,6 +1,6 @@
 {
   "name": "versie-cli",
-  "version": "1.4.0",
+  "version": "1.4.2",
   "description": "Git made invisible for non-technical builders",
   "type": "module",
   "bin": {

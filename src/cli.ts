@@ -30,7 +30,7 @@ import { projectTimeline } from "./tools/project-timeline.js";
 import { deployPlatformHelp } from "./tools/deploy-platform-help.js";
 import { readConfig, writeConfig } from "./utils/config.js";
 import { startDeviceFlow, pollDeviceFlow, readAuthToken } from "./auth/device-flow.js";
-import { runUninstaller } from "./install.js";
+import { runInstaller, runUninstaller } from "./install.js";
 import { createHash } from "node:crypto";
 import { createInterface } from "node:readline";
 import { git } from "./git/executor.js";
@@ -211,6 +211,12 @@ async function run(): Promise<void> {
       } else {
         console.log("Project removed from your Versie dashboard. Local files are untouched.");
       }
+      break;
+    }
+
+    case "install":
+    case "--install": {
+      runInstaller();
       break;
     }
 
