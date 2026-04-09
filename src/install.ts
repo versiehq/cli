@@ -240,10 +240,10 @@ export function runInstaller(): void {
 
   if (installed.length > 0) {
     console.log(
-      'Restart your AI tools and you\'re good to go!\nOpen a project and say "save my work" to get started.'
+      'Restart your AI tools and you\'re good to go!\nOpen a project and say "set up versie" to get started.'
     );
   } else if (alreadyInstalled.length > 0 && installed.length === 0) {
-    console.log('Versie is already set up. Open a project and say "save my work" to get started.');
+    console.log('Versie is already set up. Open a project and say "set up versie" to get started.');
   }
 }
 
