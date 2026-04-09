@@ -32,11 +32,17 @@ interface ToolConfig {
  * active, the correct absolute path gets written.
  */
 function buildVersieEntry(): { command: string; args: string[] } {
-  const npxPath = join(dirname(process.execPath), "npx");
-  // Fall back to bare "npx" only if the sibling binary doesn't exist
-  // (e.g. unusual global install layouts).
-  const command = existsSync(npxPath) ? npxPath : "npx";
-  return { command, args: ["-y", "versie-cli"] };
+  // GUI apps (Claude Desktop, Cursor, Windsurf) launch subprocesses with a
+  // minimal PATH that excludes nvm/fnm. npx has a #!/usr/bin/env node shebang
+  // so running it directly resolves to the system Node, not the active version.
+  // Fix: use the absolute node binary as command and pass npx as an argument,
+  // bypassing shebang resolution entirely.
+  const nodePath = process.execPath;
+  const npxPath = join(dirname(nodePath), "npx");
+  if (existsSync(npxPath)) {
+    return { command: nodePath, args: [npxPath, "-y", "versie-cli"] };
+  }
+  return { command: "npx", args: ["-y", "versie-cli"] };
 }
 
 function getToolConfigs(): ToolConfig[] {
