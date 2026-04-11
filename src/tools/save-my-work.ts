@@ -76,7 +76,16 @@ export async function saveMyWork(args: z.infer<typeof saveMyWorkSchema.inputSche
     }
 
     // Likely diverged history — try pull --rebase then retry
-    await git(["pull", "--rebase", "origin", config.devBranch], repoPath);
+    const rebaseResult = await git(["pull", "--rebase", "origin", config.devBranch], repoPath);
+    if (rebaseResult.exitCode !== 0) {
+      // Rebase hit a conflict — abort to leave the repo in a clean state,
+      // then surface a message the AI can act on via fix_this_error.
+      await git(["rebase", "--abort"], repoPath);
+      throw new Error(
+        `Your work is saved locally but couldn't sync — there's a conflict with changes on GitHub. ` +
+        `Run fix_this_error with this message to resolve it: ${rebaseResult.stderr}`
+      );
+    }
     const retryPush = await git(["push", "-u", "origin", config.devBranch], repoPath);
     if (retryPush.exitCode !== 0) {
       throw new Error(
