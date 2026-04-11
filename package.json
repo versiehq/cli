@@ -31,11 +31,22 @@
     "node": ">=18.0.0"
   },
   "keywords": [
-    "cli",
-    "mcp",
     "git",
-    "versie",
-    "non-technical"
+    "version-control",
+    "vibe-coding",
+    "vibe-coders",
+    "cursor",
+    "claude-code",
+    "claude",
+    "mcp",
+    "mcp-server",
+    "ai-coding",
+    "rollback",
+    "undo",
+    "deploy",
+    "safety",
+    "no-code",
+    "low-code"
   ],
   "license": "AGPL-3.0",
   "repository": {
