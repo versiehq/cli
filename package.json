@@ -1,7 +1,7 @@
 {
   "name": "versie-cli",
-  "version": "1.4.9",
-  "description": "Git made invisible for non-technical builders",
+  "version": "1.4.10",
+  "description": "Natural language version control for vibe coders — save, ship, and roll back your AI-generated code without touching Git. Works with Cursor, Claude Code, and any MCP client.",
   "type": "module",
   "bin": {
     "versie": "./build/cli.js",
