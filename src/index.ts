@@ -37,7 +37,8 @@ const server = new McpServer(
       "Always run versie commands from the project directory. " +
       "When the user says 'list commands', 'what can versie do', 'versie help', or similar — run `versie` (no args) in the project directory and show the output verbatim. Do not summarize or generate your own list. " +
       "Use the fix_this_error MCP tool (not versie fix) when the user pastes an error in chat — it handles multi-line errors reliably. " +
-      "When a tool returns output, paste it directly as plain text — no quotes, no code blocks, no rewording.",
+      "When a tool returns output, paste it directly as plain text — no quotes, no code blocks, no rewording. " +
+      "When running any versie CLI command via bash, ALWAYS show the complete raw output to the user verbatim — never summarize, paraphrase, or shorten it, even if the output is long.",
   }
 );
 

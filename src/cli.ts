@@ -33,7 +33,11 @@ import { startDeviceFlow, pollDeviceFlow, readAuthToken } from "./auth/device-fl
 import { runInstaller, runUninstaller } from "./install.js";
 import { createHash } from "node:crypto";
 import { createInterface } from "node:readline";
+import { createRequire } from "node:module";
 import { git } from "./git/executor.js";
+
+const _require = createRequire(import.meta.url);
+const { version: pkgVersion } = _require("../package.json") as { version: string };
 
 async function confirm(question: string): Promise<boolean> {
   // Non-interactive (piped/AI tool) — require explicit --yes flag instead
@@ -235,6 +239,13 @@ async function run(): Promise<void> {
       break;
     }
 
+    case "version":
+    case "--version":
+    case "-v": {
+      console.log(`versie ${pkgVersion}`);
+      break;
+    }
+
     case "help":
     case "--help":
     case "-h":
@@ -259,6 +270,7 @@ COMMANDS
   versie config <setting> <val>  Change a setting (show-git-commands, telemetry)
   versie remove                  Remove this project from the Versie dashboard
   versie uninstall               Remove Versie from your AI tools
+  versie version                 Show the installed version
         `.trim());
       } else {
         // Running inside an AI tool — show natural language phrases instead of CLI syntax

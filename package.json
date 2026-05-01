@@ -1,6 +1,6 @@
 {
   "name": "versie-cli",
-  "version": "1.4.11",
+  "version": "1.4.12",
   "description": "Natural language version control for vibe coders — save, ship, and roll back your AI-generated code without touching Git. Works with Cursor, Claude Code, and any MCP client.",
   "type": "module",
   "bin": {
