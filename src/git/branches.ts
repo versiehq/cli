@@ -47,10 +47,12 @@ export async function runSetupFlow(repoPath: string, githubUrl?: string, devBran
       // Auto-setup: init, commit, create GitHub repo, push — all without user running anything
       const initErr = await runLocalInit(repoPath);
       if (initErr) return initErr;
+      let ghUrl = "";
       try {
-        await execFileAsync("gh", ["repo", "create", name, "--private", "--source=.", "--push"], {
+        const ghResult = await execFileAsync("gh", ["repo", "create", name, "--private", "--source=.", "--push"], {
           cwd: repoPath, env: process.env, timeout: 30_000,
         });
+        ghUrl = (ghResult.stdout ?? "").trim();
       } catch (e: unknown) {
         const err = e as { stderr?: string; stdout?: string; message?: string };
         const msg = ((err.stderr ?? "") + (err.stdout ?? "") + (err.message ?? "")).trim();
@@ -63,7 +65,10 @@ export async function runSetupFlow(repoPath: string, githubUrl?: string, devBran
       }
       await ensureInitialized(repoPath, devBranchName);
       track("first_run");
-      return SETUP_COMPLETE_MESSAGE;
+      const ghLine = ghUrl
+        ? `✓ Created and connected your GitHub repo: ${ghUrl}\n\n`
+        : `✓ Created and connected a private GitHub repo for this project.\n\n`;
+      return ghLine + SETUP_COMPLETE_MESSAGE;
     }
 
     if (githubUrl) {
@@ -101,10 +106,12 @@ export async function runSetupFlow(repoPath: string, githubUrl?: string, devBran
     const name = getProjectName(repoPath);
 
     if (await isGhAvailable()) {
+      let ghUrl = "";
       try {
-        await execFileAsync("gh", ["repo", "create", name, "--private", "--source=.", "--push"], {
+        const ghResult = await execFileAsync("gh", ["repo", "create", name, "--private", "--source=.", "--push"], {
           cwd: repoPath, env: process.env, timeout: 30_000,
         });
+        ghUrl = (ghResult.stdout ?? "").trim();
       } catch (e: unknown) {
         const err = e as { stderr?: string; stdout?: string; message?: string };
         const msg = ((err.stderr ?? "") + (err.stdout ?? "") + (err.message ?? "")).trim();
@@ -117,7 +124,10 @@ export async function runSetupFlow(repoPath: string, githubUrl?: string, devBran
       }
       await ensureInitialized(repoPath, devBranchName);
       track("first_run");
-      return SETUP_COMPLETE_MESSAGE;
+      const ghLine = ghUrl
+        ? `✓ Created and connected your GitHub repo: ${ghUrl}\n\n`
+        : `✓ Created and connected a private GitHub repo for this project.\n\n`;
+      return ghLine + SETUP_COMPLETE_MESSAGE;
     }
 
     if (githubUrl) {
